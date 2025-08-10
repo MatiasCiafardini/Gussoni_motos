@@ -1,6 +1,6 @@
 from __future__ import annotations
-from dataclasses import dataclass, asdict
-from typing import Dict, Any, List, Optional
+from dataclasses import dataclass
+from typing import Dict, Any, Optional
 import pandas as pd
 from pathlib import Path
 from .settings import CLIENTES_XLSX, VEHICULOS_XLSX, DATA_DIR
@@ -14,6 +14,7 @@ class Cliente:
     email: str
     telefono: str
     direccion: str
+    estado: str  # "Activo" | "Inactivo"
 
 @dataclass
 class Vehiculo:
@@ -24,15 +25,15 @@ class Vehiculo:
     vin: str
     precio: float
     estado: str  # Disponible, Vendido, Reservado
-    cliente_id: Optional[int] = None  # relacion si se vendió
+    cliente_id: Optional[int] = None
 
 # ----------------- Helpers Excel -----------------
 def ensure_excel_files_exist():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     if not CLIENTES_XLSX.exists():
         df = pd.DataFrame([
-            {"id": 1, "nombre": "Ana Pérez", "dni": "12345678A", "email": "ana@example.com", "telefono": "600111222", "direccion": "Calle Sol 123"},
-            {"id": 2, "nombre": "Bruno Díaz", "dni": "98765432B", "email": "bruno@example.com", "telefono": "600333444", "direccion": "Av. Luna 45"},
+            {"id": 1, "nombre": "Ana Pérez", "dni": "12345678A", "email": "ana@example.com", "telefono": "600111222", "direccion": "Calle Sol 123", "estado": "Activo"},
+            {"id": 2, "nombre": "Bruno Díaz", "dni": "98765432B", "email": "bruno@example.com", "telefono": "600333444", "direccion": "Av. Luna 45", "estado": "Activo"},
         ])
         df.to_excel(CLIENTES_XLSX, index=False)
     if not VEHICULOS_XLSX.exists():
@@ -44,20 +45,35 @@ def ensure_excel_files_exist():
         df.to_excel(VEHICULOS_XLSX, index=False)
 
 # --- Clientes ---
+def _normalize_clientes(df: pd.DataFrame) -> pd.DataFrame:
+    # Asegura columna 'estado' y valores válidos
+    if "estado" not in df.columns:
+        df["estado"] = "Activo"
+    else:
+        df["estado"] = df["estado"].fillna("Activo").replace({"": "Activo"})
+        df.loc[~df["estado"].isin(["Activo", "Inactivo"]), "estado"] = "Activo"
+    # Reordenar columnas a un orden consistente
+    ordered = ["id", "nombre", "dni", "email", "telefono", "direccion", "estado"]
+    cols = [c for c in ordered if c in df.columns] + [c for c in df.columns if c not in ordered]
+    return df[cols]
+
 def load_clientes(filters: Dict[str, Any] | None = None) -> pd.DataFrame:
     ensure_excel_files_exist()
     df = pd.read_excel(CLIENTES_XLSX)
+    df = _normalize_clientes(df)
     if filters:
         if v := filters.get("nombre"):
             df = df[df["nombre"].str.contains(str(v), case=False, na=False)]
         if v := filters.get("dni"):
-            df = df[df["dni"].str.contains(str(v), case=False, na=False)]
+            df = df[df["dni"].str_contains(str(v), case=False, na=False)] if hasattr(df["dni"], "str_contains") else df[df["dni"].str.contains(str(v), case=False, na=False)]
         if v := filters.get("email"):
             df = df[df["email"].str.contains(str(v), case=False, na=False)]
+        if v := filters.get("estado"):
+            df = df[df["estado"] == str(v)]
     return df.reset_index(drop=True)
 
 def get_cliente_by_id(cid: int) -> Optional[dict]:
-    df = load_clientes()
+    df = load_clientes({})
     row = df[df["id"] == cid]
     return None if row.empty else row.iloc[0].to_dict()
 
@@ -65,19 +81,32 @@ def save_cliente(data: Dict[str, Any]) -> int:
     """Crea o actualiza. Devuelve id del cliente."""
     ensure_excel_files_exist()
     df = pd.read_excel(CLIENTES_XLSX)
+    df = _normalize_clientes(df)
+    # Estado por defecto
+    estado_in = data.get("estado", None)
+    if not estado_in or estado_in not in ("Activo", "Inactivo"):
+        data["estado"] = "Activo"
+
     if "id" in data and pd.notna(data["id"]) and int(data["id"]) in df["id"].tolist():
         idx = df.index[df["id"] == int(data["id"])][0]
-        for k in ["nombre","dni","email","telefono","direccion"]:
-            df.loc[idx, k] = data.get(k, df.loc[idx, k])
+        for k in ["nombre","dni","email","telefono","direccion","estado"]:
+            if k in data:
+                df.loc[idx, k] = data.get(k, df.loc[idx, k])
         cid = int(df.loc[idx, "id"])
     else:
         cid = (df["id"].max() if not df.empty else 0) + 1
         data["id"] = int(cid)
+        # asegurar todas las columnas
+        for k in ["nombre","dni","email","telefono","direccion","estado"]:
+            data.setdefault(k, "" if k != "estado" else "Activo")
         df = pd.concat([df, pd.DataFrame([data])], ignore_index=True)
+
+    df = _normalize_clientes(df)
     df.to_excel(CLIENTES_XLSX, index=False)
     return int(cid)
 
 def delete_cliente(cid: int) -> bool:
+    """Se mantiene por compatibilidad, pero ya no se usa (soft delete con estado)."""
     ensure_excel_files_exist()
     df = pd.read_excel(CLIENTES_XLSX)
     before = len(df)
@@ -96,8 +125,7 @@ def load_vehiculos(filters: Dict[str, Any] | None = None) -> pd.DataFrame:
             df = df[df["modelo"].str.contains(str(v), case=False, na=False)]
         if v := filters.get("anio"):
             try:
-                anio = int(v)
-                df = df[df["anio"] == anio]
+                anio = int(v); df = df[df["anio"] == anio]
             except Exception:
                 pass
         if v := filters.get("vin"):
@@ -107,7 +135,7 @@ def load_vehiculos(filters: Dict[str, Any] | None = None) -> pd.DataFrame:
     return df.reset_index(drop=True)
 
 def get_vehiculo_by_id(vid: int) -> Optional[dict]:
-    df = load_vehiculos()
+    df = load_vehiculos({})
     row = df[df["id"] == vid]
     return None if row.empty else row.iloc[0].to_dict()
 

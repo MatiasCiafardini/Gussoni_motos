@@ -4,12 +4,24 @@ import pandas as pd
 class ClientesModel(QAbstractTableModel):
     def __init__(self, df: pd.DataFrame | None = None, parent=None):
         super().__init__(parent)
-        self._df = df if df is not None else pd.DataFrame(columns=["id","nombre","dni","email","telefono","direccion"])
+        # Aseguramos columnas estándar incl. 'estado'
+        base_cols = ["id","nombre","dni","email","telefono","direccion","estado"]
+        if df is None:
+            self._df = pd.DataFrame(columns=base_cols)
+        else:
+            for c in base_cols:
+                if c not in df.columns:
+                    df[c] = "" if c != "estado" else "Activo"
+            self._df = df[base_cols].copy()
         self._columns = list(self._df.columns) + ["perfil"]  # columna de acción
 
     def setDataFrame(self, df: pd.DataFrame):
         self.beginResetModel()
-        self._df = df.copy()
+        base_cols = ["id","nombre","dni","email","telefono","direccion","estado"]
+        for c in base_cols:
+            if c not in df.columns:
+                df[c] = "" if c != "estado" else "Activo"
+        self._df = df[base_cols].copy()
         self._columns = list(self._df.columns) + ["perfil"]
         self.endResetModel()
 
@@ -23,8 +35,7 @@ class ClientesModel(QAbstractTableModel):
         if not index.isValid():
             return None
         row = index.row()
-        col = index.column()
-        colname = self._columns[col]
+        colname = self._columns[index.column()]
         if role == Qt.DisplayRole:
             if colname == "perfil":
                 return "Perfil"

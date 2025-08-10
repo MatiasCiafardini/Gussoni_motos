@@ -1,12 +1,12 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QGroupBox, QGridLayout, QLabel,
-    QLineEdit, QPushButton, QHBoxLayout
+    QLineEdit, QPushButton, QHBoxLayout, QWidget as _QWidget, QComboBox
 )
 from PySide6.QtCore import Qt
 from src.data import util_excel as ux
 from .clientes_tabla import ClientesTabla
-from .clientes_perfil import ClientePerfil
 from .clientes_detalle import ClienteDetalle
+from .clientes_editar import ClienteEditar
 
 
 class ClientesMain(QWidget):
@@ -21,22 +21,20 @@ class ClientesMain(QWidget):
 
         # --- Filtros (tabla inicia vacía) ---
         self.gb_filtros = QGroupBox("Filtros")
+        # QLabels y contenedores transparentes
+        self.gb_filtros.setStyleSheet("""
+            QLabel { background: transparent; }
+            QWidget#btnContainer { background: transparent; }
+        """)
 
-        # Widgets de filtro (compactos)
-        self.f_nombre = QLineEdit()
-        self.f_nombre.setPlaceholderText("Ej: Ana")
-        self.f_nombre.setMinimumWidth(160)
-        self.f_nombre.setMaximumWidth(260)
+        # Widgets de filtro
+        self.f_nombre = QLineEdit();  self.f_nombre.setPlaceholderText("Ej: Ana"); self.f_nombre.setMinimumWidth(160); self.f_nombre.setMaximumWidth(260)
+        self.f_dni = QLineEdit();     self.f_dni.setPlaceholderText("Ej: 12345678A"); self.f_dni.setMinimumWidth(160); self.f_dni.setMaximumWidth(260)
+        self.f_email = QLineEdit();   self.f_email.setPlaceholderText("Ej: nombre@correo.com"); self.f_email.setMinimumWidth(160); self.f_email.setMaximumWidth(260)
 
-        self.f_dni = QLineEdit()
-        self.f_dni.setPlaceholderText("Ej: 12345678A")
-        self.f_dni.setMinimumWidth(160)
-        self.f_dni.setMaximumWidth(260)
-
-        self.f_email = QLineEdit()
-        self.f_email.setPlaceholderText("Ej: nombre@correo.com")
-        self.f_email.setMinimumWidth(160)
-        self.f_email.setMaximumWidth(260)
+        self.f_estado = QComboBox()
+        self.f_estado.addItems(["Activo", "Inactivo", "Todos"])
+        self.f_estado.setCurrentText("Activo")  # por defecto mostrar activos
 
         # Layout de grilla “responsive”
         self.grid_filtros = QGridLayout()
@@ -47,16 +45,18 @@ class ClientesMain(QWidget):
 
         # Barra de botones dentro del GroupBox
         self._buttons_bar = QHBoxLayout()
-        self.btn_buscar = QPushButton("Buscar")
-        self.btn_buscar.setObjectName("Primary")
+        self.btn_buscar = QPushButton("Buscar");  self.btn_buscar.setObjectName("Primary")
         self.btn_limpiar = QPushButton("Limpiar")
-        self.btn_agregar = QPushButton("Agregar cliente")
-        self.btn_agregar.setObjectName("Primary")
-
+        self.btn_agregar = QPushButton("Agregar cliente"); self.btn_agregar.setObjectName("Primary")
         self._buttons_bar.addWidget(self.btn_buscar)
         self._buttons_bar.addWidget(self.btn_limpiar)
         self._buttons_bar.addStretch(1)
         self._buttons_bar.addWidget(self.btn_agregar)
+
+        # Contenedor para los botones con fondo transparente
+        self._btn_container = _QWidget()
+        self._btn_container.setObjectName("btnContainer")
+        self._btn_container.setLayout(self._buttons_bar)
 
         # Primera disposición (se recalcula en resizeEvent)
         self._arrange_filters(cols=3)
@@ -72,16 +72,13 @@ class ClientesMain(QWidget):
         self.btn_limpiar.clicked.connect(self.clear_filters)
         self.btn_agregar.clicked.connect(self.open_new)
 
-        # click en Perfil -> abre DETALLE como página interna
-        self.tabla.delegate.clicked.connect(self.on_click_perfil)
+        # Clic en botón/ícono "Perfil" de la tabla
+        self.tabla.perfil_clicked.connect(self.on_click_perfil)
 
     # =====================
     # Disposición responsive
     # =====================
     def _arrange_filters(self, cols: int):
-        """Distribuye los filtros en 1, 2 o 3 columnas (cada filtro: etiqueta + campo)
-           y agrega la fila de botones dentro del mismo GroupBox.
-        """
         if self._filter_cols == cols:
             return
         self._filter_cols = cols
@@ -90,17 +87,16 @@ class ClientesMain(QWidget):
         while self.grid_filtros.count():
             item = self.grid_filtros.takeAt(0)
             w = item.widget()
-            if w:
-                w.setParent(None)
+            if w: w.setParent(None)
 
         # Lista de (etiqueta, widget)
         pairs = [
             (QLabel("Nombre:"), self.f_nombre),
             (QLabel("DNI:"), self.f_dni),
             (QLabel("Email:"), self.f_email),
+            (QLabel("Estado:"), self.f_estado),
         ]
 
-        # Columnas del grid: por cada filtro usamos 2 columnas (etiqueta, campo)
         for i, (lab, field) in enumerate(pairs):
             row = i // cols
             col = (i % cols) * 2
@@ -111,39 +107,33 @@ class ClientesMain(QWidget):
         for c in range(total_grid_cols):
             self.grid_filtros.setColumnStretch(c, 0 if c % 2 == 0 else 1)
 
-        # Fila de botones
-        btn_container = QWidget()
-        btn_container.setLayout(self._buttons_bar)
         last_row = (len(pairs) - 1) // cols + 1
-        self.grid_filtros.addWidget(btn_container, last_row, 0, 1, total_grid_cols)
+        self.grid_filtros.addWidget(self._btn_container, last_row, 0, 1, total_grid_cols)
 
     def resizeEvent(self, ev):
         super().resizeEvent(ev)
         w = self.width()
-        if w >= 1000:
-            cols = 3
-        elif w >= 700:
-            cols = 2
-        else:
-            cols = 1
+        cols = 3 if w >= 1000 else 2 if w >= 700 else 1
         self._arrange_filters(cols)
 
     # =====================
     # Acciones
     # =====================
     def clear_filters(self):
-        self.f_nombre.clear()
-        self.f_dni.clear()
-        self.f_email.clear()
+        self.f_nombre.clear(); self.f_dni.clear(); self.f_email.clear()
+        self.f_estado.setCurrentText("Activo")
         self.tabla.set_dataframe(self.tabla.model._df.iloc[0:0])
         self._notify("Filtros limpiados.")
 
     def load_data(self):
+        estado_value = self.f_estado.currentText()
         filters = {
             "nombre": self.f_nombre.text().strip(),
             "dni": self.f_dni.text().strip(),
             "email": self.f_email.text().strip(),
+            "estado": None if estado_value == "Todos" else estado_value,
         }
+        filters = {k: v for k, v in filters.items() if v}
         df = ux.load_clientes(filters)
         self.tabla.set_dataframe(df)
         self._notify(f"Se cargaron {len(df)} clientes.")
@@ -152,16 +142,14 @@ class ClientesMain(QWidget):
         cid = self.tabla.model.get_row_id(row)
         if cid is None:
             return
-        # Navegar a la página interna de detalle
-        detalle = ClienteDetalle(
-            cliente_id=cid,
-            notify=self._notify,
-            navigate=self._navigate,
-            navigate_back=self._navigate_back
-        )
+        detalle = ClienteDetalle(cliente_id=cid, notify=self._notify, navigate=self._navigate, navigate_back=self._navigate_back)
         self._navigate(detalle)
 
     def open_new(self):
-        dlg = ClientePerfil(self, cliente_id=None)
-        if dlg.exec():
-            self.load_data()
+        editor = ClienteEditar(cliente_id=None, notify=self._notify, navigate=self._navigate,
+                               navigate_back=self._navigate_back, on_saved=self._after_new_saved,
+                               back_steps_after_delete=1)
+        self._navigate(editor)
+
+    def _after_new_saved(self, cid: int):
+        self.load_data()
