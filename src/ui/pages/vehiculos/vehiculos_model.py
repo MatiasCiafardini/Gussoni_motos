@@ -2,25 +2,57 @@ from PySide6.QtCore import QAbstractTableModel, Qt, QModelIndex
 import pandas as pd
 
 class VehiculosModel(QAbstractTableModel):
+    """
+    Columnas (en este orden):
+    - id (oculta en la vista, solo interna)
+    - marca
+    - modelo
+    - anio (int)
+    - nro_certificado
+    - nro_dnrpa
+    - nro_cuadro
+    - nro_motor
+    - precio (moneda)
+    - remito
+    - factura
+    - estado
+    - perfil (acción con 🔍)
+    """
+    BASE_COLS = [
+        "id", "marca", "modelo", "anio",
+        "nro_certificado", "nro_dnrpa", "nro_cuadro", "nro_motor",
+        "precio", "remito", "factura", "estado"
+    ]
+
     def __init__(self, df: pd.DataFrame | None = None, parent=None):
         super().__init__(parent)
-        base_cols = ["id","marca","modelo","anio","vin","precio","estado"]
         if df is None:
-            self._df = pd.DataFrame(columns=base_cols)
+            self._df = pd.DataFrame(columns=self.BASE_COLS)
         else:
-            for c in base_cols:
+            df = df.copy()
+            for c in self.BASE_COLS:
                 if c not in df.columns:
-                    df[c] = "" if c not in ("anio","precio") else None
-            self._df = df[base_cols].copy()
+                    df[c] = ""
+            self._df = df[self.BASE_COLS]
         self._columns = list(self._df.columns) + ["perfil"]
+
+    # utilidades
+    def columns(self):
+        return list(self._columns)
+
+    def column_index(self, name: str) -> int:
+        try:
+            return self._columns.index(name)
+        except ValueError:
+            return -1
 
     def setDataFrame(self, df: pd.DataFrame):
         self.beginResetModel()
-        base_cols = ["id","marca","modelo","anio","vin","precio","estado"]
-        for c in base_cols:
+        df = df.copy()
+        for c in self.BASE_COLS:
             if c not in df.columns:
-                df[c] = "" if c not in ("anio","precio") else None
-        self._df = df[base_cols].copy()
+                df[c] = ""
+        self._df = df[self.BASE_COLS]
         self._columns = list(self._df.columns) + ["perfil"]
         self.endResetModel()
 
@@ -38,28 +70,44 @@ class VehiculosModel(QAbstractTableModel):
 
         if role == Qt.DisplayRole:
             if colname == "perfil":
-                return ""  # sin texto; se coloca un botón en la tabla
+                return ""  # el botón se coloca con setIndexWidget
             val = self._df.iloc[row].get(colname)
-            return "" if pd.isna(val) else str(val)
+            if pd.isna(val):
+                return ""
+            if colname == "anio":
+                try:
+                    return str(int(val))
+                except Exception:
+                    return str(val)
+            if colname == "precio":
+                # muestra con 2 decimales estilo 1.234,56 si es numérico
+                try:
+                    num = float(val)
+                    return f"{num:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                except Exception:
+                    return str(val)
+            return str(val)
         return None
 
     def headerData(self, section, orientation, role=Qt.DisplayRole):
         if role == Qt.DisplayRole and orientation == Qt.Horizontal:
             colname = self._columns[section]
-            if colname == "perfil":
-                return "Perfil"
             pretty = {
                 "id": "ID",
                 "marca": "Marca",
-                "modelo": "Modelo",
+                "modelo": "MODELO",
                 "anio": "Año",
-                "vin": "VIN",
+                "nro_certificado": "Nº CERTIFICADO",
+                "nro_dnrpa": "Nº DNRPA",
+                "nro_cuadro": "Nº CUADRO",
+                "nro_motor": "Nº MOTOR",
                 "precio": "Precio",
+                "remito": "REMITO",
+                "factura": "FACTURA",
                 "estado": "Estado",
+                "perfil": "Perfil",
             }
             return pretty.get(colname, colname.capitalize())
-        if role == Qt.DecorationRole and orientation == Qt.Horizontal:
-            return None
         return super().headerData(section, orientation, role)
 
     def get_row_id(self, row: int) -> int | None:
