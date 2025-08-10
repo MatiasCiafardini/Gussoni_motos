@@ -8,6 +8,8 @@ from .clientes_tabla import ClientesTabla
 from .clientes_detalle import ClienteDetalle
 from .clientes_editar import ClienteEditar
 
+LABEL_STRETCH = 1
+FIELD_STRETCH = 3
 
 class ClientesMain(QWidget):
     def __init__(self, parent=None, notify=None, navigate=None, navigate_back=None):
@@ -15,37 +17,35 @@ class ClientesMain(QWidget):
         self._notify = notify or (lambda msg: None)
         self._navigate = navigate or (lambda w: None)
         self._navigate_back = navigate_back or (lambda: None)
-        self._filter_cols = None  # cantidad de columnas actual (1/2/3)
+        self._filter_cols = None  # 1/2/3 columnas de filtros
 
         lay = QVBoxLayout(self)
 
-        # --- Filtros (tabla inicia vacía) ---
-        self.gb_filtros = QGroupBox("Filtros")
-        # QLabels y contenedores transparentes
+        # --- Filtros (SIN título) ---
+        self.gb_filtros = QGroupBox("")
         self.gb_filtros.setStyleSheet("""
+            QGroupBox { margin-top: 0px; }
             QLabel { background: transparent; }
             QWidget#btnContainer { background: transparent; }
         """)
 
-        # Widgets de filtro
-        self.f_nombre = QLineEdit();  self.f_nombre.setPlaceholderText("Ej: Ana"); self.f_nombre.setMinimumWidth(160); self.f_nombre.setMaximumWidth(260)
-        self.f_dni = QLineEdit();     self.f_dni.setPlaceholderText("Ej: 12345678A"); self.f_dni.setMinimumWidth(160); self.f_dni.setMaximumWidth(260)
-        self.f_email = QLineEdit();   self.f_email.setPlaceholderText("Ej: nombre@correo.com"); self.f_email.setMinimumWidth(160); self.f_email.setMaximumWidth(260)
+        self.f_nombre = QLineEdit();  self.f_nombre.setPlaceholderText("Ej: Ana")
+        self.f_dni    = QLineEdit();  self.f_dni.setPlaceholderText("Ej: 12345678A")
+        self.f_email  = QLineEdit();  self.f_email.setPlaceholderText("Ej: nombre@correo.com")
 
         self.f_estado = QComboBox()
         self.f_estado.addItems(["Activo", "Inactivo", "Todos"])
         self.f_estado.setCurrentText("Activo")  # por defecto mostrar activos
 
-        # Layout de grilla “responsive”
         self.grid_filtros = QGridLayout()
         self.grid_filtros.setContentsMargins(12, 12, 12, 12)
         self.grid_filtros.setHorizontalSpacing(16)
         self.grid_filtros.setVerticalSpacing(10)
         self.gb_filtros.setLayout(self.grid_filtros)
 
-        # Barra de botones dentro del GroupBox
+        # Botones dentro del groupbox
         self._buttons_bar = QHBoxLayout()
-        self.btn_buscar = QPushButton("Buscar");  self.btn_buscar.setObjectName("Primary")
+        self.btn_buscar  = QPushButton("Buscar");  self.btn_buscar.setObjectName("Primary")
         self.btn_limpiar = QPushButton("Limpiar")
         self.btn_agregar = QPushButton("Agregar cliente"); self.btn_agregar.setObjectName("Primary")
         self._buttons_bar.addWidget(self.btn_buscar)
@@ -53,14 +53,10 @@ class ClientesMain(QWidget):
         self._buttons_bar.addStretch(1)
         self._buttons_bar.addWidget(self.btn_agregar)
 
-        # Contenedor para los botones con fondo transparente
-        self._btn_container = _QWidget()
-        self._btn_container.setObjectName("btnContainer")
+        self._btn_container = _QWidget(); self._btn_container.setObjectName("btnContainer")
         self._btn_container.setLayout(self._buttons_bar)
 
-        # Primera disposición (se recalcula en resizeEvent)
         self._arrange_filters(cols=3)
-
         lay.addWidget(self.gb_filtros)
 
         # --- Tabla ---
@@ -71,44 +67,42 @@ class ClientesMain(QWidget):
         self.btn_buscar.clicked.connect(self.load_data)
         self.btn_limpiar.clicked.connect(self.clear_filters)
         self.btn_agregar.clicked.connect(self.open_new)
-
-        # Clic en botón/ícono "Perfil" de la tabla
         self.tabla.perfil_clicked.connect(self.on_click_perfil)
 
-    # =====================
-    # Disposición responsive
-    # =====================
+        # 🔙 SIN búsqueda automática al iniciar
+
+    # ----- Disposición responsive con proporciones fijas -----
     def _arrange_filters(self, cols: int):
         if self._filter_cols == cols:
             return
         self._filter_cols = cols
 
-        # Limpia el grid actual
+        # Limpiar grid
         while self.grid_filtros.count():
             item = self.grid_filtros.takeAt(0)
             w = item.widget()
             if w: w.setParent(None)
 
-        # Lista de (etiqueta, widget)
         pairs = [
             (QLabel("Nombre:"), self.f_nombre),
-            (QLabel("DNI:"), self.f_dni),
-            (QLabel("Email:"), self.f_email),
+            (QLabel("DNI:"),    self.f_dni),
+            (QLabel("Email:"),  self.f_email),
             (QLabel("Estado:"), self.f_estado),
         ]
 
         for i, (lab, field) in enumerate(pairs):
+            lab.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
             row = i // cols
             col = (i % cols) * 2
-            self.grid_filtros.addWidget(lab, row, col, alignment=Qt.AlignVCenter)
+            self.grid_filtros.addWidget(lab,   row, col)
             self.grid_filtros.addWidget(field, row, col + 1)
 
-        total_grid_cols = cols * 2
-        for c in range(total_grid_cols):
-            self.grid_filtros.setColumnStretch(c, 0 if c % 2 == 0 else 1)
+        total_cols = cols * 2
+        for c in range(total_cols):
+            self.grid_filtros.setColumnStretch(c, LABEL_STRETCH if c % 2 == 0 else FIELD_STRETCH)
 
         last_row = (len(pairs) - 1) // cols + 1
-        self.grid_filtros.addWidget(self._btn_container, last_row, 0, 1, total_grid_cols)
+        self.grid_filtros.addWidget(self._btn_container, last_row, 0, 1, total_cols)
 
     def resizeEvent(self, ev):
         super().resizeEvent(ev)
@@ -116,21 +110,18 @@ class ClientesMain(QWidget):
         cols = 3 if w >= 1000 else 2 if w >= 700 else 1
         self._arrange_filters(cols)
 
-    # =====================
-    # Acciones
-    # =====================
+    # ----- Acciones -----
     def clear_filters(self):
         self.f_nombre.clear(); self.f_dni.clear(); self.f_email.clear()
         self.f_estado.setCurrentText("Activo")
-        self.tabla.set_dataframe(self.tabla.model._df.iloc[0:0])
         self._notify("Filtros limpiados.")
 
     def load_data(self):
         estado_value = self.f_estado.currentText()
         filters = {
             "nombre": self.f_nombre.text().strip(),
-            "dni": self.f_dni.text().strip(),
-            "email": self.f_email.text().strip(),
+            "dni":    self.f_dni.text().strip(),
+            "email":  self.f_email.text().strip(),
             "estado": None if estado_value == "Todos" else estado_value,
         }
         filters = {k: v for k, v in filters.items() if v}

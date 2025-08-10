@@ -35,16 +35,31 @@ class VehiculosModel(QAbstractTableModel):
             return None
         row = index.row()
         colname = self._columns[index.column()]
+
         if role == Qt.DisplayRole:
             if colname == "perfil":
-                return "🔍"
+                return ""  # sin texto; se coloca un botón en la tabla
             val = self._df.iloc[row].get(colname)
             return "" if pd.isna(val) else str(val)
         return None
 
     def headerData(self, section, orientation, role=Qt.DisplayRole):
         if role == Qt.DisplayRole and orientation == Qt.Horizontal:
-            return self._columns[section].capitalize()
+            colname = self._columns[section]
+            if colname == "perfil":
+                return "Perfil"
+            pretty = {
+                "id": "ID",
+                "marca": "Marca",
+                "modelo": "Modelo",
+                "anio": "Año",
+                "vin": "VIN",
+                "precio": "Precio",
+                "estado": "Estado",
+            }
+            return pretty.get(colname, colname.capitalize())
+        if role == Qt.DecorationRole and orientation == Qt.Horizontal:
+            return None
         return super().headerData(section, orientation, role)
 
     def get_row_id(self, row: int) -> int | None:

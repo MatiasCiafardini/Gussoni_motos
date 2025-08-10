@@ -8,6 +8,9 @@ from .vehiculos_tabla import VehiculosTabla
 from .vehiculos_detalle import VehiculoDetalle
 from .vehiculos_editar import VehiculoEditar
 
+LABEL_STRETCH = 1
+FIELD_STRETCH = 3
+
 class VehiculosMain(QWidget):
     def __init__(self, parent=None, notify=None, navigate=None, navigate_back=None):
         super().__init__(parent)
@@ -18,20 +21,20 @@ class VehiculosMain(QWidget):
 
         lay = QVBoxLayout(self)
 
-        # --- Filtros ---
-        self.gb_filtros = QGroupBox("Filtros")
+        # --- Filtros (SIN título) ---
+        self.gb_filtros = QGroupBox("")
         self.gb_filtros.setStyleSheet("""
+            QGroupBox { margin-top: 0px; }
             QLabel { background: transparent; }
             QWidget#btnContainer { background: transparent; }
         """)
 
-        self.f_marca = QLineEdit();  self.f_marca.setPlaceholderText("Ej: Yamaha");  self.f_marca.setMinimumWidth(160); self.f_marca.setMaximumWidth(260)
-        self.f_modelo = QLineEdit(); self.f_modelo.setPlaceholderText("Ej: MT-07"); self.f_modelo.setMinimumWidth(160); self.f_modelo.setMaximumWidth(260)
-        self.f_anio = QLineEdit();   self.f_anio.setPlaceholderText("Ej: 2024");    self.f_anio.setMinimumWidth(120); self.f_anio.setMaximumWidth(180)
-        self.f_vin = QLineEdit();    self.f_vin.setPlaceholderText("Ej: VIN0001");  self.f_vin.setMinimumWidth(160); self.f_vin.setMaximumWidth(260)
-
-        # Estado incluye "No disponible"
+        self.f_marca  = QLineEdit(); self.f_marca.setPlaceholderText("Ej: Yamaha")
+        self.f_modelo = QLineEdit(); self.f_modelo.setPlaceholderText("Ej: MT-07")
+        self.f_anio   = QLineEdit(); self.f_anio.setPlaceholderText("Ej: 2024")
+        self.f_vin    = QLineEdit(); self.f_vin.setPlaceholderText("Ej: VIN0001")
         self.f_estado = QComboBox(); self.f_estado.addItems(["Todos","Disponible","Reservado","Vendido","No disponible"])
+        self.f_estado.setCurrentText("Todos")
 
         self.grid_filtros = QGridLayout()
         self.grid_filtros.setContentsMargins(12, 12, 12, 12)
@@ -41,7 +44,7 @@ class VehiculosMain(QWidget):
 
         # Botones dentro del groupbox
         self._buttons_bar = QHBoxLayout()
-        self.btn_buscar = QPushButton("Buscar");  self.btn_buscar.setObjectName("Primary")
+        self.btn_buscar  = QPushButton("Buscar");  self.btn_buscar.setObjectName("Primary")
         self.btn_limpiar = QPushButton("Limpiar")
         self.btn_agregar = QPushButton("Agregar vehículo"); self.btn_agregar.setObjectName("Primary")
         self._buttons_bar.addWidget(self.btn_buscar)
@@ -65,7 +68,9 @@ class VehiculosMain(QWidget):
         self.btn_agregar.clicked.connect(self.open_new)
         self.tabla.perfil_clicked.connect(self.on_click_perfil)
 
-    # Responsive layout
+        # 🔙 SIN búsqueda automática al iniciar
+
+    # ----- Disposición responsive con proporciones fijas -----
     def _arrange_filters(self, cols: int):
         if self._filter_cols == cols:
             return
@@ -77,25 +82,26 @@ class VehiculosMain(QWidget):
             if w: w.setParent(None)
 
         pairs = [
-            (QLabel("Marca:"), self.f_marca),
+            (QLabel("Marca:"),  self.f_marca),
             (QLabel("Modelo:"), self.f_modelo),
-            (QLabel("Año:"), self.f_anio),
-            (QLabel("VIN:"), self.f_vin),
+            (QLabel("Año:"),    self.f_anio),
+            (QLabel("VIN:"),    self.f_vin),
             (QLabel("Estado:"), self.f_estado),
         ]
 
         for i, (lab, field) in enumerate(pairs):
+            lab.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
             row = i // cols
             col = (i % cols) * 2
-            self.grid_filtros.addWidget(lab, row, col, alignment=Qt.AlignVCenter)
+            self.grid_filtros.addWidget(lab,   row, col)
             self.grid_filtros.addWidget(field, row, col + 1)
 
-        total = cols * 2
-        for c in range(total):
-            self.grid_filtros.setColumnStretch(c, 0 if c % 2 == 0 else 1)
+        total_cols = cols * 2
+        for c in range(total_cols):
+            self.grid_filtros.setColumnStretch(c, LABEL_STRETCH if c % 2 == 0 else FIELD_STRETCH)
 
         last_row = (len(pairs) - 1) // cols + 1
-        self.grid_filtros.addWidget(self._btn_container, last_row, 0, 1, total)
+        self.grid_filtros.addWidget(self._btn_container, last_row, 0, 1, total_cols)
 
     def resizeEvent(self, ev):
         super().resizeEvent(ev)
@@ -103,23 +109,23 @@ class VehiculosMain(QWidget):
         cols = 3 if w >= 1000 else 2 if w >= 700 else 1
         self._arrange_filters(cols)
 
-    # Acciones
+    # ----- Acciones -----
     def clear_filters(self):
         self.f_marca.clear(); self.f_modelo.clear(); self.f_anio.clear(); self.f_vin.clear()
         self.f_estado.setCurrentText("Todos")
-        self.tabla.set_dataframe(self.tabla.model._df.iloc[0:0])
         self._notify("Filtros limpiados.")
 
     def load_data(self):
         filters = {
-            "marca": self.f_marca.text().strip(),
+            "marca":  self.f_marca.text().strip(),
             "modelo": self.f_modelo.text().strip(),
-            "anio": self.f_anio.text().strip(),
-            "vin": self.f_vin.text().strip(),
+            "anio":   self.f_anio.text().strip(),
+            "vin":    self.f_vin.text().strip(),
             "estado": self.f_estado.currentText(),
         }
-        if filters["estado"] == "Todos": filters["estado"] = None
-        filters = {k:v for k,v in filters.items() if v}
+        if filters["estado"] == "Todos":
+            filters["estado"] = None
+        filters = {k: v for k, v in filters.items() if v}
         df = ux.load_vehiculos(filters)
         self.tabla.set_dataframe(df)
         self._notify(f"Se cargaron {len(df)} vehículos.")
