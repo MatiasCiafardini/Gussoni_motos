@@ -4,12 +4,23 @@ import pandas as pd
 class VehiculosModel(QAbstractTableModel):
     def __init__(self, df: pd.DataFrame | None = None, parent=None):
         super().__init__(parent)
-        self._df = df if df is not None else pd.DataFrame(columns=["id","marca","modelo","anio","vin","precio","estado","cliente_id"])
+        base_cols = ["id","marca","modelo","anio","vin","precio","estado"]
+        if df is None:
+            self._df = pd.DataFrame(columns=base_cols)
+        else:
+            for c in base_cols:
+                if c not in df.columns:
+                    df[c] = "" if c not in ("anio","precio") else None
+            self._df = df[base_cols].copy()
         self._columns = list(self._df.columns) + ["perfil"]
 
     def setDataFrame(self, df: pd.DataFrame):
         self.beginResetModel()
-        self._df = df.copy()
+        base_cols = ["id","marca","modelo","anio","vin","precio","estado"]
+        for c in base_cols:
+            if c not in df.columns:
+                df[c] = "" if c not in ("anio","precio") else None
+        self._df = df[base_cols].copy()
         self._columns = list(self._df.columns) + ["perfil"]
         self.endResetModel()
 
@@ -26,11 +37,9 @@ class VehiculosModel(QAbstractTableModel):
         colname = self._columns[index.column()]
         if role == Qt.DisplayRole:
             if colname == "perfil":
-                return "Perfil"
+                return "🔍"
             val = self._df.iloc[row].get(colname)
-            if pd.isna(val):
-                return ""
-            return str(val)
+            return "" if pd.isna(val) else str(val)
         return None
 
     def headerData(self, section, orientation, role=Qt.DisplayRole):
