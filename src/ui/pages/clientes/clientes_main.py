@@ -1,41 +1,69 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QGroupBox, QFormLayout, QLineEdit, QPushButton, QHBoxLayout
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QGroupBox, QGridLayout, QLabel,
+    QLineEdit, QPushButton, QHBoxLayout
+)
+from PySide6.QtCore import Qt
 from src.data import util_excel as ux
 from .clientes_tabla import ClientesTabla
 from .clientes_perfil import ClientePerfil
+from .clientes_detalle import ClienteDetalle
+
 
 class ClientesMain(QWidget):
-    def __init__(self, parent=None, notify=None):
+    def __init__(self, parent=None, notify=None, navigate=None, navigate_back=None):
         super().__init__(parent)
         self._notify = notify or (lambda msg: None)
+        self._navigate = navigate or (lambda w: None)
+        self._navigate_back = navigate_back or (lambda: None)
+        self._filter_cols = None  # cantidad de columnas actual (1/2/3)
+
         lay = QVBoxLayout(self)
 
-        # Filtros (tabla inicia vacía)
-        gb = QGroupBox("Filtros")
-        f = QFormLayout()
-        self.f_nombre = QLineEdit()
-        self.f_dni = QLineEdit()
-        self.f_email = QLineEdit()
-        f.addRow("Nombre:", self.f_nombre)
-        f.addRow("DNI:", self.f_dni)
-        f.addRow("Email:", self.f_email)
-        gb.setLayout(f)
+        # --- Filtros (tabla inicia vacía) ---
+        self.gb_filtros = QGroupBox("Filtros")
 
-        hb = QHBoxLayout()
+        # Widgets de filtro (compactos)
+        self.f_nombre = QLineEdit()
+        self.f_nombre.setPlaceholderText("Ej: Ana")
+        self.f_nombre.setMinimumWidth(160)
+        self.f_nombre.setMaximumWidth(260)
+
+        self.f_dni = QLineEdit()
+        self.f_dni.setPlaceholderText("Ej: 12345678A")
+        self.f_dni.setMinimumWidth(160)
+        self.f_dni.setMaximumWidth(260)
+
+        self.f_email = QLineEdit()
+        self.f_email.setPlaceholderText("Ej: nombre@correo.com")
+        self.f_email.setMinimumWidth(160)
+        self.f_email.setMaximumWidth(260)
+
+        # Layout de grilla “responsive”
+        self.grid_filtros = QGridLayout()
+        self.grid_filtros.setContentsMargins(12, 12, 12, 12)
+        self.grid_filtros.setHorizontalSpacing(16)
+        self.grid_filtros.setVerticalSpacing(10)
+        self.gb_filtros.setLayout(self.grid_filtros)
+
+        # Barra de botones dentro del GroupBox
+        self._buttons_bar = QHBoxLayout()
         self.btn_buscar = QPushButton("Buscar")
         self.btn_buscar.setObjectName("Primary")
         self.btn_limpiar = QPushButton("Limpiar")
-        hb.addWidget(self.btn_buscar)
-        hb.addWidget(self.btn_limpiar)
-        hb.addStretch(1)
-
         self.btn_agregar = QPushButton("Agregar cliente")
         self.btn_agregar.setObjectName("Primary")
-        hb.addWidget(self.btn_agregar)
 
-        lay.addWidget(gb)
-        lay.addLayout(hb)
+        self._buttons_bar.addWidget(self.btn_buscar)
+        self._buttons_bar.addWidget(self.btn_limpiar)
+        self._buttons_bar.addStretch(1)
+        self._buttons_bar.addWidget(self.btn_agregar)
 
-        # Tabla
+        # Primera disposición (se recalcula en resizeEvent)
+        self._arrange_filters(cols=3)
+
+        lay.addWidget(self.gb_filtros)
+
+        # --- Tabla ---
         self.tabla = ClientesTabla(self)
         lay.addWidget(self.tabla)
 
@@ -44,14 +72,70 @@ class ClientesMain(QWidget):
         self.btn_limpiar.clicked.connect(self.clear_filters)
         self.btn_agregar.clicked.connect(self.open_new)
 
-        # click en Perfil
+        # click en Perfil -> abre DETALLE como página interna
         self.tabla.delegate.clicked.connect(self.on_click_perfil)
 
+    # =====================
+    # Disposición responsive
+    # =====================
+    def _arrange_filters(self, cols: int):
+        """Distribuye los filtros en 1, 2 o 3 columnas (cada filtro: etiqueta + campo)
+           y agrega la fila de botones dentro del mismo GroupBox.
+        """
+        if self._filter_cols == cols:
+            return
+        self._filter_cols = cols
+
+        # Limpia el grid actual
+        while self.grid_filtros.count():
+            item = self.grid_filtros.takeAt(0)
+            w = item.widget()
+            if w:
+                w.setParent(None)
+
+        # Lista de (etiqueta, widget)
+        pairs = [
+            (QLabel("Nombre:"), self.f_nombre),
+            (QLabel("DNI:"), self.f_dni),
+            (QLabel("Email:"), self.f_email),
+        ]
+
+        # Columnas del grid: por cada filtro usamos 2 columnas (etiqueta, campo)
+        for i, (lab, field) in enumerate(pairs):
+            row = i // cols
+            col = (i % cols) * 2
+            self.grid_filtros.addWidget(lab, row, col, alignment=Qt.AlignVCenter)
+            self.grid_filtros.addWidget(field, row, col + 1)
+
+        total_grid_cols = cols * 2
+        for c in range(total_grid_cols):
+            self.grid_filtros.setColumnStretch(c, 0 if c % 2 == 0 else 1)
+
+        # Fila de botones
+        btn_container = QWidget()
+        btn_container.setLayout(self._buttons_bar)
+        last_row = (len(pairs) - 1) // cols + 1
+        self.grid_filtros.addWidget(btn_container, last_row, 0, 1, total_grid_cols)
+
+    def resizeEvent(self, ev):
+        super().resizeEvent(ev)
+        w = self.width()
+        if w >= 1000:
+            cols = 3
+        elif w >= 700:
+            cols = 2
+        else:
+            cols = 1
+        self._arrange_filters(cols)
+
+    # =====================
+    # Acciones
+    # =====================
     def clear_filters(self):
         self.f_nombre.clear()
         self.f_dni.clear()
         self.f_email.clear()
-        self.tabla.set_dataframe(self.tabla.model._df.iloc[0:0])  # vaciar
+        self.tabla.set_dataframe(self.tabla.model._df.iloc[0:0])
         self._notify("Filtros limpiados.")
 
     def load_data(self):
@@ -68,10 +152,14 @@ class ClientesMain(QWidget):
         cid = self.tabla.model.get_row_id(row)
         if cid is None:
             return
-        dlg = ClientePerfil(self, cliente_id=cid)
-        if dlg.exec():
-            # recargar por si hubo cambios
-            self.load_data()
+        # Navegar a la página interna de detalle
+        detalle = ClienteDetalle(
+            cliente_id=cid,
+            notify=self._notify,
+            navigate=self._navigate,
+            navigate_back=self._navigate_back
+        )
+        self._navigate(detalle)
 
     def open_new(self):
         dlg = ClientePerfil(self, cliente_id=None)

@@ -29,7 +29,7 @@ class MainWindow(QMainWindow):
         title.setStyleSheet("font-size:18px; font-weight:700;")
         sbl.addWidget(title)
 
-        # Orden del menú: Inicio, Clientes, Vehículos, Facturación, Reportes, Configuración
+        # Menú
         self.btn_inicio = QPushButton("Inicio")
         self.btn_clientes = QPushButton("Clientes")
         self.btn_vehiculos = QPushButton("Vehículos")
@@ -43,8 +43,11 @@ class MainWindow(QMainWindow):
 
         # Stack de páginas
         self.stack = QStackedWidget(self)
+        self._page_history = []  # historial para navegación interna (push/pop)
+
+        # Páginas "fijas"
         self.page_inicio = DashboardPage()
-        self.page_clientes = ClientesMain(notify=self.notify)
+        self.page_clientes = ClientesMain(notify=self.notify, navigate=self.navigate_to, navigate_back=self.navigate_back)
         self.page_vehiculos = VehiculosMain(notify=self.notify)
         self.page_facturacion = FacturacionPage()
         self.page_reportes = ReportesPage()
@@ -55,13 +58,13 @@ class MainWindow(QMainWindow):
         root.addWidget(sidebar)
         root.addWidget(self.stack, 1)
 
-        # connections
-        self.btn_inicio.clicked.connect(lambda: self.stack.setCurrentWidget(self.page_inicio))
-        self.btn_clientes.clicked.connect(lambda: self.stack.setCurrentWidget(self.page_clientes))
-        self.btn_vehiculos.clicked.connect(lambda: self.stack.setCurrentWidget(self.page_vehiculos))
-        self.btn_facturacion.clicked.connect(lambda: self.stack.setCurrentWidget(self.page_facturacion))
-        self.btn_reportes.clicked.connect(lambda: self.stack.setCurrentWidget(self.page_reportes))
-        self.btn_config.clicked.connect(lambda: self.stack.setCurrentWidget(self.page_config))
+        # connections (al usar el menú, limpiamos historial y vamos a la página fija)
+        self.btn_inicio.clicked.connect(lambda: self.show_fixed_page(self.page_inicio))
+        self.btn_clientes.clicked.connect(lambda: self.show_fixed_page(self.page_clientes))
+        self.btn_vehiculos.clicked.connect(lambda: self.show_fixed_page(self.page_vehiculos))
+        self.btn_facturacion.clicked.connect(lambda: self.show_fixed_page(self.page_facturacion))
+        self.btn_reportes.clicked.connect(lambda: self.show_fixed_page(self.page_reportes))
+        self.btn_config.clicked.connect(lambda: self.show_fixed_page(self.page_config))
 
         # notificación tipo "toast"
         self._toast = QLabel("", self)
@@ -74,6 +77,40 @@ class MainWindow(QMainWindow):
         self._toast_timer.setSingleShot(True)
         self._toast_timer.timeout.connect(lambda: self._toast.setVisible(False))
 
+    # =====================
+    # Navegación interna
+    # =====================
+    def navigate_to(self, widget: QWidget):
+        """Empuja una página temporal al stack y navega a ella."""
+        self._page_history.append(self.stack.currentWidget())
+        self.stack.addWidget(widget)
+        self.stack.setCurrentWidget(widget)
+
+    def navigate_back(self):
+        """Vuelve a la página anterior y elimina la página temporal actual."""
+        if not self._page_history:
+            return
+        current = self.stack.currentWidget()
+        prev = self._page_history.pop()
+        self.stack.setCurrentWidget(prev)
+        # quitar la página temporal del stack
+        current.setParent(None)
+        current.deleteLater()
+
+    def show_fixed_page(self, page: QWidget):
+        """Limpia cualquier página temporal y muestra una de las páginas fijas."""
+        # Si hay una página temporal activa, ir retrocediendo y eliminando
+        while self._page_history:
+            current = self.stack.currentWidget()
+            prev = self._page_history.pop()
+            self.stack.setCurrentWidget(prev)
+            current.setParent(None)
+            current.deleteLater()
+        self.stack.setCurrentWidget(page)
+
+    # =====================
+    # Toast
+    # =====================
     def resizeEvent(self, ev):
         super().resizeEvent(ev)
         # posicionar toast bottom-center

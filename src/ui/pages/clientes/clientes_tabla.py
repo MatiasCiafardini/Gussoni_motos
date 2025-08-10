@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QTableView
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QTableView, QAbstractItemView
 from .clientes_model import ClientesModel
 from .clientes_delegate import PerfilButtonDelegate
 
@@ -12,6 +12,9 @@ class ClientesTabla(QWidget):
         self.view.setSelectionMode(QTableView.SingleSelection)
         self.view.setAlternatingRowColors(True)
         self.view.horizontalHeader().setStretchLastSection(True)
+
+        # Evitar que la vista entre en modo edición (así no intenta crear editores)
+        self.view.setEditTriggers(QAbstractItemView.NoEditTriggers)
 
         # Delegate para botón Perfil (última columna)
         self.delegate = PerfilButtonDelegate(self.view)
