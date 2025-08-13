@@ -139,7 +139,6 @@ class VehiculosMain(QWidget):
         filters = {k: v for k, v in filters.items() if v}
         df = ux.load_vehiculos(filters)
         self.tabla.set_dataframe(df)
-        self._notify(f"Se cargaron {len(df)} vehículos.")
 
     def on_click_perfil(self, row: int):
         vid = self.tabla.model.get_row_id(row)

@@ -10,7 +10,7 @@ def main():
     apply_theme(app, base_font_pt=15)
 
     win = MainWindow()
-    win.show()
+    win.showMaximized()
     sys.exit(app.exec())
 
 if __name__ == "__main__":

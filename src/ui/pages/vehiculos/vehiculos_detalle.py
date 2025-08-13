@@ -3,8 +3,17 @@ from PySide6.QtWidgets import (
     QHBoxLayout, QGroupBox
 )
 from PySide6.QtCore import Qt
+import locale
 from src.data import util_excel as ux
 from .vehiculos_editar import VehiculoEditar
+
+# Configuración de formato local (puedes ajustarlo a tu región)
+try:
+    locale.setlocale(locale.LC_ALL, '')
+except locale.Error:
+    # Si falla, usar configuración por defecto
+    pass
+
 
 class VehiculoDetalle(QWidget):
     """Perfil interno del vehículo. 'Editar' debajo de Datos (derecha). 'Volver' abajo centrado."""
@@ -17,12 +26,14 @@ class VehiculoDetalle(QWidget):
 
         root = QVBoxLayout(self)
 
-        title = QLabel("Perfil del Vehículo"); title.setStyleSheet("font-size:16px; font-weight:600;")
+        title = QLabel("Perfil del vehículo")
+        title.setStyleSheet("font-size:16px; font-weight:600;")
         root.addWidget(title)
 
         # Datos
-        self.gb_datos = QGroupBox("Datos")
+        self.gb_datos = QGroupBox("")
         form = QFormLayout()
+
         self.lbl_id = QLabel("")
         self.lbl_marca = QLabel("")
         self.lbl_modelo = QLabel("")
@@ -31,31 +42,39 @@ class VehiculoDetalle(QWidget):
         self.lbl_precio = QLabel("")
         self.lbl_estado = QLabel("")
         self.lbl_cliente_id = QLabel("")
-        for w in [self.lbl_id, self.lbl_marca, self.lbl_modelo, self.lbl_anio, self.lbl_vin, self.lbl_precio, self.lbl_estado, self.lbl_cliente_id]:
+
+        for w in [
+            self.lbl_id, self.lbl_marca, self.lbl_modelo, self.lbl_anio,
+            self.lbl_vin, self.lbl_precio, self.lbl_estado, self.lbl_cliente_id
+        ]:
             w.setTextInteractionFlags(Qt.TextSelectableByMouse)
 
-        form.addRow("ID:", self.lbl_id)
-        form.addRow("Marca:", self.lbl_marca)
-        form.addRow("Modelo:", self.lbl_modelo)
-        form.addRow("Año:", self.lbl_anio)
-        form.addRow("VIN:", self.lbl_vin)
-        form.addRow("Precio:", self.lbl_precio)
-        form.addRow("Estado:", self.lbl_estado)
-        form.addRow("Cliente ID:", self.lbl_cliente_id)
+        form.addRow(QLabel("Marca:"),    self.lbl_marca)
+        form.addRow(QLabel("Modelo:"),   self.lbl_modelo)
+        form.addRow(QLabel("Año:"),      self.lbl_anio)
+        form.addRow(QLabel("VIN:"),      self.lbl_vin)
+        form.addRow(QLabel("Precio:"),   self.lbl_precio)
+        form.addRow(QLabel("Estado:"),   self.lbl_estado)
+        form.addRow(QLabel("Cliente ID:"), self.lbl_cliente_id)
+
         self.gb_datos.setLayout(form)
         root.addWidget(self.gb_datos)
 
-        # Botón Editar abajo a la derecha de la caja de Datos
+        # Botón Editar abajo a la derecha
         row_edit = QHBoxLayout()
-        self.btn_editar = QPushButton("Editar"); self.btn_editar.setObjectName("Primary")
-        row_edit.addStretch(1); row_edit.addWidget(self.btn_editar)
+        self.btn_editar = QPushButton("Editar")
+        self.btn_editar.setObjectName("Primary")
+        row_edit.addStretch(1)
+        row_edit.addWidget(self.btn_editar)
         root.addLayout(row_edit)
 
-        # Empujar Volver hacia abajo centrado
+        # Botón Volver centrado abajo
         root.addStretch(1)
         bottom = QHBoxLayout()
         self.btn_volver = QPushButton("Volver")
-        bottom.addStretch(1); bottom.addWidget(self.btn_volver); bottom.addStretch(1)
+        bottom.addStretch(1)
+        bottom.addWidget(self.btn_volver)
+        bottom.addStretch(1)
         root.addLayout(bottom)
 
         # Eventos
@@ -83,16 +102,30 @@ class VehiculoDetalle(QWidget):
     def _load(self, vid: int):
         data = ux.get_vehiculo_by_id(vid)
         if not data:
-            self._notify("Vehículo no encontrado."); self.btn_editar.setEnabled(False); return
-        self._id = vid
-        self.lbl_id.setText(str(data.get("id","")))
-        self.lbl_marca.setText(str(data.get("marca","")))
-        self.lbl_modelo.setText(str(data.get("modelo","")))
-        self.lbl_anio.setText(str(data.get("anio","")))
-        self.lbl_vin.setText(str(data.get("vin","")))
-        self.lbl_precio.setText(str(data.get("precio","")))
-        self.lbl_estado.setText(str(data.get("estado","")))
+            self._notify("Vehículo no encontrado.")
+            self.btn_editar.setEnabled(False)
+            return
+
+        self.lbl_id.setText(str(data.get("id", "")))
+        self.lbl_marca.setText(str(data.get("marca", "")))
+        self.lbl_modelo.setText(str(data.get("modelo", "")))
+        self.lbl_anio.setText(str(data.get("anio", "")))
+        self.lbl_vin.setText(str(data.get("vin", "")))
+
+        # Formatear precio como moneda
+        precio = data.get("precio", 0)
+        try:
+            precio = float(precio)
+            # Formato local de moneda
+            self.lbl_precio.setText(locale.currency(precio, grouping=True, symbol=True))
+        except (ValueError, TypeError):
+            self.lbl_precio.setText(str(precio))
+
+        self.lbl_estado.setText(str(data.get("estado", "")))
         self.lbl_cliente_id.setText("" if pd_isna(data.get("cliente_id")) else str(data.get("cliente_id")))
+
+        self._id = vid
+
 
 def pd_isna(x):
     try:

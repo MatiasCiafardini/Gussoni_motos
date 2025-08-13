@@ -127,7 +127,6 @@ class ClientesMain(QWidget):
         filters = {k: v for k, v in filters.items() if v}
         df = ux.load_clientes(filters)
         self.tabla.set_dataframe(df)
-        self._notify(f"Se cargaron {len(df)} clientes.")
 
     def on_click_perfil(self, row: int):
         cid = self.tabla.model.get_row_id(row)

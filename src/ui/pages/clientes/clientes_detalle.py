@@ -1,129 +1,100 @@
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QLabel, QPushButton, QFrame, QHBoxLayout, QFormLayout
+    QWidget, QVBoxLayout, QLabel, QFormLayout, QPushButton,
+    QHBoxLayout, QGroupBox
 )
 from PySide6.QtCore import Qt
 from src.data import util_excel as ux
 from .clientes_editar import ClienteEditar
 
 class ClienteDetalle(QWidget):
-    """
-    Perfil del cliente (compacto):
-    - QFormLayout (label–valor por fila), sin proporciones 1/3 ni columnas extra.
-    - Botón Editar abajo a la derecha del card.
-    - Botón Volver centrado abajo.
-    """
-    def __init__(self, cliente_id: int, notify=None, navigate=None, navigate_back=None):
-        super().__init__()
+    """Perfil interno del vehículo. 'Editar' debajo de Datos (derecha). 'Volver' abajo centrado."""
+    def __init__(self, parent=None, cliente_id: int | None = None, notify=None, navigate=None, navigate_back=None):
+        super().__init__(parent)
         self._id = cliente_id
-        self._notify = notify or (lambda m: None)
+        self._notify = notify or (lambda msg: None)
         self._navigate = navigate or (lambda w: None)
         self._navigate_back = navigate_back or (lambda: None)
 
-        # Root
         root = QVBoxLayout(self)
-        root.setContentsMargins(12, 12, 12, 12)
-        root.setSpacing(8)
 
-        # Card
-        self.card = QFrame(self)
-        self.card.setObjectName("Card")
-        card_lay = QVBoxLayout(self.card)
-        card_lay.setContentsMargins(10, 10, 10, 10)
-        card_lay.setSpacing(6)
+        title = QLabel("Perfil del cliente"); title.setStyleSheet("font-size:16px; font-weight:600;")
+        root.addWidget(title)
 
-        title = QLabel("Perfil del cliente")
-        title.setStyleSheet("font-size: 16px; font-weight: 600; margin: 0; padding: 0;")
-        card_lay.addWidget(title)
-
-        # --- Form (sin 1/3) ---
+        # Datos
+        self.gb_datos = QGroupBox("")
         form = QFormLayout()
-        form.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        form.setFormAlignment(Qt.AlignLeft | Qt.AlignTop)
-        form.setSpacing(6)
+        self.lbl_id = QLabel("")
+        self.lbl_nombre = QLabel("")
+        self.lbl_dni = QLabel("")
+        self.lbl_email = QLabel("")
+        self.lbl_telefono = QLabel("")
+        self.lbl_direccion = QLabel("")
+        self.lbl_estado = QLabel("")
+        for w in [self.lbl_id, self.lbl_nombre, self.lbl_dni, self.lbl_email, self.lbl_telefono, self.lbl_direccion, self.lbl_estado]:
+            w.setTextInteractionFlags(Qt.TextSelectableByMouse)
 
-        def vlabel():
-            lab = QLabel("")
-            lab.setTextInteractionFlags(Qt.TextSelectableByMouse)
-            lab.setWordWrap(True)
-            return lab
 
-        self._vals = {
-            "nombre": vlabel(),
-            "dni": vlabel(),
-            "email": vlabel(),
-            "telefono": vlabel(),
-            "direccion": vlabel(),
-            "estado": vlabel(),
-        }
+        form.addRow(QLabel("Nombre:"),    self.lbl_nombre)
+        form.addRow(QLabel("DNI:"),       self.lbl_dni)
+        form.addRow(QLabel("Email:"),     self.lbl_email)
+        form.addRow(QLabel("Teléfono:"),  self.lbl_telefono)
+        form.addRow(QLabel("Dirección:"), self.lbl_direccion)
+        form.addRow(QLabel("Estado:"),    self.lbl_estado)
+        self.gb_datos.setLayout(form)
+        root.addWidget(self.gb_datos)
 
-        form.addRow(QLabel("Nombre:"),    self._vals["nombre"])
-        form.addRow(QLabel("DNI:"),       self._vals["dni"])
-        form.addRow(QLabel("Email:"),     self._vals["email"])
-        form.addRow(QLabel("Teléfono:"),  self._vals["telefono"])
-        form.addRow(QLabel("Dirección:"), self._vals["direccion"])
-        form.addRow(QLabel("Estado:"),    self._vals["estado"])
+        # Botón Editar abajo a la derecha de la caja de Datos
+        row_edit = QHBoxLayout()
+        self.btn_editar = QPushButton("Editar"); self.btn_editar.setObjectName("Primary")
+        row_edit.addStretch(1); row_edit.addWidget(self.btn_editar)
+        root.addLayout(row_edit)
 
-        card_lay.addLayout(form)
-
-        # Acciones del card
-        actions = QHBoxLayout()
-        actions.setContentsMargins(0, 6, 0, 0)
-        actions.addStretch(1)
-        self.btn_editar = QPushButton("Editar")
-        self.btn_editar.setObjectName("Primary")
-        actions.addWidget(self.btn_editar)
-        card_lay.addLayout(actions)
-
-        root.addWidget(self.card)
-
-        # Barra inferior (Volver centrado)
+        # Empujar Volver hacia abajo centrado
+        root.addStretch(1)
         bottom = QHBoxLayout()
-        bottom.setContentsMargins(0, 6, 0, 0)
-        bottom.addStretch(1)
         self.btn_volver = QPushButton("Volver")
-        bottom.addWidget(self.btn_volver)
-        bottom.addStretch(1)
+        bottom.addStretch(1); bottom.addWidget(self.btn_volver); bottom.addStretch(1)
         root.addLayout(bottom)
 
-        # Conexiones
+        # Eventos
         self.btn_volver.clicked.connect(self._navigate_back)
-        self.btn_editar.clicked.connect(self._open_editor)
+        self.btn_editar.clicked.connect(self._on_editar)
 
-        # Cargar datos
-        self._load()
+        if cliente_id is not None:
+            self._load(cliente_id)
+        else:
+            self.btn_editar.setEnabled(False)
 
-    # --------- Datos ---------
-    def _load(self):
-        try:
-            data = ux.get_cliente_by_id(self._id) if hasattr(ux, "get_cliente_by_id") else {}
-            if not data:
-                df = ux.load_clientes({})
-                row = df.loc[df["id"].astype(str) == str(self._id)]
-                data = {} if row.empty else row.iloc[0].to_dict()
-            if not data:
-                self._notify("No se encontró el cliente.")
-                return
-
-            self._vals["nombre"].setText(str(data.get("nombre", "")))
-            self._vals["dni"].setText(str(data.get("dni", "")))
-            self._vals["email"].setText(str(data.get("email", "")))
-            self._vals["telefono"].setText(str(data.get("telefono", "")))
-            self._vals["direccion"].setText(str(data.get("direccion", "")))
-            self._vals["estado"].setText(str(data.get("estado") or "Activo"))
-
-        except Exception as e:
-            self._notify(f"Error al cargar el cliente: {e}")
-
-    def _open_editor(self):
+    def _on_editar(self):
         editor = ClienteEditar(
             cliente_id=self._id,
             notify=self._notify,
             navigate=self._navigate,
             navigate_back=self._navigate_back,
-            on_saved=self._after_saved
+            on_saved=self._after_edit_saved
         )
         self._navigate(editor)
 
-    def _after_saved(self, cid: int):
-        self._load()
-        self._notify("Cliente actualizado.")
+    def _after_edit_saved(self, cid: int):
+        self._load(cid)
+
+    def _load(self, cid: int):
+        data = ux.get_cliente_by_id(cid)
+        if not data:
+            self._notify("Cliente no encontrado."); 
+            self.btn_editar.setEnabled(False); 
+            return
+        self._id = cid
+        self.lbl_nombre.setText(str(data.get("nombre", "")))
+        self.lbl_dni.setText(str(data.get("dni", "")))
+        self.lbl_email.setText(str(data.get("email", "")))
+        self.lbl_telefono.setText(str(data.get("telefono", "")))
+        self.lbl_direccion.setText(str(data.get("direccion", "")))
+        self.lbl_estado.setText(str(data.get("estado") or "Activo"))
+
+def pd_isna(x):
+    try:
+        import pandas as pd
+        return pd.isna(x)
+    except Exception:
+        return x is None
