@@ -29,11 +29,13 @@ class VehiculosMain(QWidget):
             QWidget#btnContainer { background: transparent; }
         """)
 
-        self.f_marca  = QLineEdit(); self.f_marca.setPlaceholderText("Ej: Yamaha")
-        self.f_modelo = QLineEdit(); self.f_modelo.setPlaceholderText("Ej: MT-07")
-        self.f_anio   = QLineEdit(); self.f_anio.setPlaceholderText("Ej: 2024")
-        self.f_vin    = QLineEdit(); self.f_vin.setPlaceholderText("Ej: VIN0001")
-        self.f_estado = QComboBox(); self.f_estado.addItems(["Todos","Disponible","Reservado","Vendido","No disponible"])
+        # Campos de filtro
+        self.f_marca   = QLineEdit(); self.f_marca.setPlaceholderText("Ej: Yamaha")
+        self.f_modelo  = QLineEdit(); self.f_modelo.setPlaceholderText("Ej: MT-07")
+        self.f_anio    = QLineEdit(); self.f_anio.setPlaceholderText("Ej: 2024")
+        self.f_cuadro  = QLineEdit(); self.f_cuadro.setPlaceholderText("Ej: 8DYC11076TB104918")
+        self.f_motor   = QLineEdit(); self.f_motor.setPlaceholderText("Ej: ZS152FMH8S200701")
+        self.f_estado  = QComboBox(); self.f_estado.addItems(["Todos","Disponible","Reservado","Vendido","No disponible"])
         self.f_estado.setCurrentText("Todos")
 
         self.grid_filtros = QGridLayout()
@@ -66,9 +68,9 @@ class VehiculosMain(QWidget):
         self.btn_buscar.clicked.connect(self.load_data)
         self.btn_limpiar.clicked.connect(self.clear_filters)
         self.btn_agregar.clicked.connect(self.open_new)
-        self.tabla.perfil_clicked.connect(self.on_click_perfil)
+        self.tabla.perfil_clicked.connect(self.on_click_perfil)  # emite fila
 
-        # 🔙 SIN búsqueda automática al iniciar
+        # (Sin búsqueda automática al iniciar)
 
     # ----- Disposición responsive con proporciones fijas -----
     def _arrange_filters(self, cols: int):
@@ -76,17 +78,19 @@ class VehiculosMain(QWidget):
             return
         self._filter_cols = cols
 
+        # Limpiar grid
         while self.grid_filtros.count():
             item = self.grid_filtros.takeAt(0)
             w = item.widget()
             if w: w.setParent(None)
 
         pairs = [
-            (QLabel("Marca:"),  self.f_marca),
-            (QLabel("Modelo:"), self.f_modelo),
-            (QLabel("Año:"),    self.f_anio),
-            (QLabel("VIN:"),    self.f_vin),
-            (QLabel("Estado:"), self.f_estado),
+            (QLabel("Marca:"),          self.f_marca),
+            (QLabel("Modelo:"),         self.f_modelo),
+            (QLabel("Año:"),            self.f_anio),
+            (QLabel("Nº CUADRO:"),      self.f_cuadro),
+            (QLabel("Nº MOTOR:"),       self.f_motor),
+            (QLabel("Estado:"),         self.f_estado),
         ]
 
         for i, (lab, field) in enumerate(pairs):
@@ -111,20 +115,27 @@ class VehiculosMain(QWidget):
 
     # ----- Acciones -----
     def clear_filters(self):
-        self.f_marca.clear(); self.f_modelo.clear(); self.f_anio.clear(); self.f_vin.clear()
+        self.f_marca.clear()
+        self.f_modelo.clear()
+        self.f_anio.clear()
+        self.f_cuadro.clear()
+        self.f_motor.clear()
         self.f_estado.setCurrentText("Todos")
         self._notify("Filtros limpiados.")
 
     def load_data(self):
+        # Armado de filtros (ignora vacíos)
         filters = {
-            "marca":  self.f_marca.text().strip(),
-            "modelo": self.f_modelo.text().strip(),
-            "anio":   self.f_anio.text().strip(),
-            "vin":    self.f_vin.text().strip(),
-            "estado": self.f_estado.currentText(),
+            "marca":       self.f_marca.text().strip(),
+            "modelo":      self.f_modelo.text().strip(),
+            "anio":        self.f_anio.text().strip(),
+            "nro_cuadro":  self.f_cuadro.text().strip(),
+            "nro_motor":   self.f_motor.text().strip(),
+            "estado":      self.f_estado.currentText(),
         }
         if filters["estado"] == "Todos":
             filters["estado"] = None
+
         filters = {k: v for k, v in filters.items() if v}
         df = ux.load_vehiculos(filters)
         self.tabla.set_dataframe(df)
@@ -132,7 +143,8 @@ class VehiculosMain(QWidget):
 
     def on_click_perfil(self, row: int):
         vid = self.tabla.model.get_row_id(row)
-        if vid is None: return
+        if vid is None:
+            return
         detalle = VehiculoDetalle(vehiculo_id=vid, notify=self._notify, navigate=self._navigate, navigate_back=self._navigate_back)
         self._navigate(detalle)
 

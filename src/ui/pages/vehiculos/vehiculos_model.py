@@ -12,7 +12,7 @@ class VehiculosModel(QAbstractTableModel):
     - nro_dnrpa
     - nro_cuadro
     - nro_motor
-    - precio (moneda)
+    - precio (moneda $)
     - remito
     - factura
     - estado
@@ -23,6 +23,9 @@ class VehiculosModel(QAbstractTableModel):
         "nro_certificado", "nro_dnrpa", "nro_cuadro", "nro_motor",
         "precio", "remito", "factura", "estado"
     ]
+
+    # 👉 columnas alineadas a la derecha
+    RIGHT_ALIGNED = {"anio", "precio"}
 
     def __init__(self, df: pd.DataFrame | None = None, parent=None):
         super().__init__(parent)
@@ -62,6 +65,17 @@ class VehiculosModel(QAbstractTableModel):
     def columnCount(self, parent=QModelIndex()):
         return 0 if parent.isValid() else len(self._columns)
 
+    def _format_currency(self, val):
+        # Devuelve "$ 1.234,56" si es numérico
+        try:
+            num = float(val)
+            s = f"{num:,.2f}"              # 1,234.56
+            s = s.replace(",", "X").replace(".", ",").replace("X", ".")
+            return f"$ {s}"
+        except Exception:
+            text = str(val)
+            return text if text.startswith("$") else (f"$ {text}" if text else "")
+
     def data(self, index, role=Qt.DisplayRole):
         if not index.isValid():
             return None
@@ -80,13 +94,16 @@ class VehiculosModel(QAbstractTableModel):
                 except Exception:
                     return str(val)
             if colname == "precio":
-                # muestra con 2 decimales estilo 1.234,56 si es numérico
-                try:
-                    num = float(val)
-                    return f"{num:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                except Exception:
-                    return str(val)
+                return self._format_currency(val)
             return str(val)
+
+        if role == Qt.TextAlignmentRole:
+            # Alineación: derecha para año y precio; resto izquierda
+            if colname in self.RIGHT_ALIGNED:
+                return int(Qt.AlignRight | Qt.AlignVCenter)
+            else:
+                return int(Qt.AlignLeft | Qt.AlignVCenter)
+
         return None
 
     def headerData(self, section, orientation, role=Qt.DisplayRole):
