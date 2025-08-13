@@ -7,6 +7,7 @@ from src.data import util_excel as ux
 from .clientes_tabla import ClientesTabla
 from .clientes_detalle import ClienteDetalle
 from .clientes_editar import ClienteEditar
+import pandas as pd
 
 LABEL_STRETCH = 1
 FIELD_STRETCH = 3
@@ -18,7 +19,7 @@ class ClientesMain(QWidget):
         self._navigate = navigate or (lambda w: None)
         self._navigate_back = navigate_back or (lambda: None)
         self._filter_cols = None  # 1/2/3 columnas de filtros
-
+        self._first_show = True  # bandera para saber si es la primera vez
         lay = QVBoxLayout(self)
 
         # --- Filtros (SIN título) ---
@@ -70,7 +71,18 @@ class ClientesMain(QWidget):
         self.tabla.perfil_clicked.connect(self.on_click_perfil)
 
         # 🔙 SIN búsqueda automática al iniciar
-
+    def showEvent(self, event):
+        """Se ejecuta cada vez que la pantalla es visible."""
+        super().showEvent(event)
+        # Limpiar tabla al entrar
+        empty_df = pd.DataFrame(columns=[
+            "id", "nombre", "dni", "email", "telefono", "direccion", "estado"
+        ])
+        self.tabla.set_dataframe(empty_df)
+        if self._first_show:
+            self._first_show = False
+            return  # primera vez: no recargamos nada
+        self.load_data()
     # ----- Disposición responsive con proporciones fijas -----
     def _arrange_filters(self, cols: int):
         if self._filter_cols == cols:

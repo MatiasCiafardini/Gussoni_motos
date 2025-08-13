@@ -12,13 +12,15 @@ def _resolve_paths():
         base = Path(getattr(app_settings, "EXCEL_DIR", Path(__file__).resolve().parent / "excel"))
         clientes = Path(getattr(app_settings, "CLIENTES_XLSX", base / "clientes.xlsx"))
         vehiculos = Path(getattr(app_settings, "VEHICULOS_XLSX", base / "vehiculos.xlsx"))
+        proveedores = Path(getattr(app_settings, "PROVEEDORES_XLSX", base / "proveedores.xlsx"))
     except Exception:
         base = Path(__file__).resolve().parent / "excel"
         clientes = base / "clientes.xlsx"
         vehiculos = base / "vehiculos.xlsx"
-    return base, clientes, vehiculos
+        proveedores = base / "proveedores.xlsx"
+    return base, clientes, vehiculos, proveedores
 
-EXCEL_DIR, CLIENTES_XLSX, VEHICULOS_XLSX = _resolve_paths()
+EXCEL_DIR, CLIENTES_XLSX, VEHICULOS_XLSX, PROVEEDORES_XLSX = _resolve_paths()
 
 # -------------------------------------------------------------------
 # Normalización
@@ -268,3 +270,141 @@ def upsert_vehiculo(data: Dict[str, Any]) -> int:
             df = pd.concat([df, pd.DataFrame([data])], ignore_index=True)
     write_vehiculos_df(df)
     return int(vid)
+
+# ======================= PROVEEDORES ==========================
+# Incluimos 'proveedor_id' por compatibilidad
+_PROVEEDORES_BASE_COLS = ["id","proveedor_id","nombre","cuit","email","telefono","direccion","estado"]
+
+def load_proveedores(filters: Dict[str, Any] | None = None) -> pd.DataFrame:
+    filters = filters or {}
+    if PROVEEDORES_XLSX.exists():
+        df = pd.read_excel(PROVEEDORES_XLSX, sheet_name=0, dtype=object)
+        # Compatibilidad: si viene 'proveedor_id' y no 'id', renombro
+        if "proveedor_id" in df.columns and "id" not in df.columns:
+            df = df.rename(columns={"proveedor_id": "id"})
+    else:
+        df = pd.DataFrame(columns=_PROVEEDORES_BASE_COLS)
+
+    # Aseguro columnas y creo alias proveedor_id = id
+    df = _ensure_cols(df, _PROVEEDORES_BASE_COLS)
+    try:
+        empties = df["proveedor_id"].isna() | (df["proveedor_id"].astype(str).str.strip() == "")
+        df.loc[empties, "proveedor_id"] = df.loc[empties, "id"]
+    except Exception:
+        df["proveedor_id"] = df.get("id", "")
+
+    # Estado vacío -> "Activo" (en memoria)
+    try:
+        s = df["estado"].astype(str)
+        df.loc[s.str.strip().isin(["", "nan", "None"]), "estado"] = "Activo"
+    except Exception:
+        df["estado"] = "Activo"
+
+    # Filtros
+    def contains(col: str, val: str):
+        nonlocal df
+        if not val:
+            return
+        v = _norm_text(val)
+        s = df[col].astype(str).map(_norm_text)
+        mask = s.str.contains(v, regex=False, na=False)
+        df = df[mask]
+
+    def by_estado(val: str):
+        nonlocal df
+        if not val:
+            return
+        tgt = _norm_estado(val)
+        col = df["estado"].astype(str).map(_norm_estado)
+        df = df[col.eq(tgt)]
+
+    contains("nombre", filters.get("nombre", ""))
+    contains("cuit",   filters.get("cuit", ""))
+    contains("email",  filters.get("email", ""))
+    if filters.get("estado") is not None:
+        by_estado(filters["estado"])
+
+    return _ensure_cols(df, _PROVEEDORES_BASE_COLS).reset_index(drop=True)
+
+
+def write_proveedores_df(df: pd.DataFrame):
+    EXCEL_DIR.mkdir(parents=True, exist_ok=True)
+    # Garantizo que proveedor_id refleje id antes de escribir
+    df = df.copy()
+    if "proveedor_id" in df.columns and "id" in df.columns:
+        empties = df["proveedor_id"].isna() | (df["proveedor_id"].astype(str).str.strip() == "")
+        df.loc[empties, "proveedor_id"] = df.loc[empties, "id"]
+    df = _ensure_cols(df, _PROVEEDORES_BASE_COLS)
+    with pd.ExcelWriter(PROVEEDORES_XLSX, engine="xlsxwriter") as w:
+        df.to_excel(w, index=False, sheet_name="proveedores")
+
+
+def get_proveedor_by_id(pid: Any) -> Dict[str, Any]:
+    df = load_proveedores({})
+    try:
+        pid_int = int(str(pid).strip())
+    except Exception:
+        pid_int = None
+
+    # Busco por id y por proveedor_id (compatibilidad)
+    ids1 = pd.to_numeric(df["id"], errors="coerce")
+    row = df.loc[ids1.eq(pid_int)] if pid_int is not None else df.loc[df["id"].astype(str) == str(pid)]
+    if row.empty and "proveedor_id" in df.columns:
+        ids2 = pd.to_numeric(df["proveedor_id"], errors="coerce")
+        row = df.loc[ids2.eq(pid_int)] if pid_int is not None else df.loc[df["proveedor_id"].astype(str) == str(pid)]
+    return {} if row.empty else row.iloc[0].to_dict()
+
+
+def upsert_proveedor(data: Dict[str, Any]) -> int:
+    """
+    Inserta/actualiza un proveedor.
+    - Si no trae id/proveedor_id => asigna uno nuevo (max+1).
+    - Actualiza por coincidencia en id o proveedor_id.
+    Devuelve el id (int).
+    """
+    df = load_proveedores({})
+    d = {k: data.get(k, "") for k in _PROVEEDORES_BASE_COLS}  # normalizo claves
+
+    # Resolver id
+    raw_id = d.get("id") or d.get("proveedor_id")
+    try:
+        pid = int(str(raw_id).strip()) if raw_id not in (None, "", 0) else None
+    except Exception:
+        pid = None
+
+    if pid is None:
+        new_id = int(pd.to_numeric(df["id"], errors="coerce").max() or 0) + 1
+        d["id"] = new_id
+        d["proveedor_id"] = new_id
+        d["estado"] = "Activo"  # siempre activo en alta
+        df = pd.concat([df, pd.DataFrame([d])], ignore_index=True)
+        pid = new_id
+    else:
+        # Buscar fila por id o proveedor_id
+        idx = df.index[
+            (pd.to_numeric(df["id"], errors="coerce") == pid) |
+            (pd.to_numeric(df.get("proveedor_id", pd.Series([None]*len(df))), errors="coerce") == pid)
+        ]
+        if len(idx):
+            # Actualizar columnas conocidas
+            for col in _PROVEEDORES_BASE_COLS:
+                if col in d and d[col] != "":
+                    df.loc[idx, col] = d[col]
+            # Mantener alias en sync
+            df.loc[idx, "id"] = pid
+            df.loc[idx, "proveedor_id"] = pid
+        else:
+            # No existe: lo agrego
+            d["id"] = pid
+            d["proveedor_id"] = pid
+            if not str(d.get("estado", "")).strip():
+                d["estado"] = "Activo"
+            df = pd.concat([df, pd.DataFrame([d])], ignore_index=True)
+
+    write_proveedores_df(df)
+    return int(pid)
+
+
+def save_proveedor(data: Dict[str, Any]) -> int:
+    """Alias de upsert_proveedor para compatibilidad con la UI."""
+    return upsert_proveedor(data)

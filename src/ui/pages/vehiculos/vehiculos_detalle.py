@@ -3,17 +3,9 @@ from PySide6.QtWidgets import (
     QHBoxLayout, QGroupBox
 )
 from PySide6.QtCore import Qt
-import locale
 from src.data import util_excel as ux
+from src.data.util_format import format_currency
 from .vehiculos_editar import VehiculoEditar
-
-# Configuración de formato local (puedes ajustarlo a tu región)
-try:
-    locale.setlocale(locale.LC_ALL, '')
-except locale.Error:
-    # Si falla, usar configuración por defecto
-    pass
-
 
 class VehiculoDetalle(QWidget):
     """Perfil interno del vehículo. 'Editar' debajo de Datos (derecha). 'Volver' abajo centrado."""
@@ -30,7 +22,6 @@ class VehiculoDetalle(QWidget):
         title.setStyleSheet("font-size:16px; font-weight:600;")
         root.addWidget(title)
 
-        # Datos
         self.gb_datos = QGroupBox("")
         form = QFormLayout()
 
@@ -49,18 +40,17 @@ class VehiculoDetalle(QWidget):
         ]:
             w.setTextInteractionFlags(Qt.TextSelectableByMouse)
 
-        form.addRow(QLabel("Marca:"),    self.lbl_marca)
-        form.addRow(QLabel("Modelo:"),   self.lbl_modelo)
-        form.addRow(QLabel("Año:"),      self.lbl_anio)
-        form.addRow(QLabel("VIN:"),      self.lbl_vin)
-        form.addRow(QLabel("Precio:"),   self.lbl_precio)
-        form.addRow(QLabel("Estado:"),   self.lbl_estado)
+        form.addRow(QLabel("Marca:"), self.lbl_marca)
+        form.addRow(QLabel("Modelo:"), self.lbl_modelo)
+        form.addRow(QLabel("Año:"), self.lbl_anio)
+        form.addRow(QLabel("VIN:"), self.lbl_vin)
+        form.addRow(QLabel("Precio:"), self.lbl_precio)
+        form.addRow(QLabel("Estado:"), self.lbl_estado)
         form.addRow(QLabel("Cliente ID:"), self.lbl_cliente_id)
 
         self.gb_datos.setLayout(form)
         root.addWidget(self.gb_datos)
 
-        # Botón Editar abajo a la derecha
         row_edit = QHBoxLayout()
         self.btn_editar = QPushButton("Editar")
         self.btn_editar.setObjectName("Primary")
@@ -68,7 +58,6 @@ class VehiculoDetalle(QWidget):
         row_edit.addWidget(self.btn_editar)
         root.addLayout(row_edit)
 
-        # Botón Volver centrado abajo
         root.addStretch(1)
         bottom = QHBoxLayout()
         self.btn_volver = QPushButton("Volver")
@@ -77,7 +66,6 @@ class VehiculoDetalle(QWidget):
         bottom.addStretch(1)
         root.addLayout(bottom)
 
-        # Eventos
         self.btn_volver.clicked.connect(self._navigate_back)
         self.btn_editar.clicked.connect(self._on_editar)
 
@@ -111,21 +99,11 @@ class VehiculoDetalle(QWidget):
         self.lbl_modelo.setText(str(data.get("modelo", "")))
         self.lbl_anio.setText(str(data.get("anio", "")))
         self.lbl_vin.setText(str(data.get("vin", "")))
-
-        # Formatear precio como moneda
-        precio = data.get("precio", 0)
-        try:
-            precio = float(precio)
-            # Formato local de moneda
-            self.lbl_precio.setText(locale.currency(precio, grouping=True, symbol=True))
-        except (ValueError, TypeError):
-            self.lbl_precio.setText(str(precio))
-
+        self.lbl_precio.setText(format_currency(data.get("precio", 0)))
         self.lbl_estado.setText(str(data.get("estado", "")))
         self.lbl_cliente_id.setText("" if pd_isna(data.get("cliente_id")) else str(data.get("cliente_id")))
 
         self._id = vid
-
 
 def pd_isna(x):
     try:

@@ -2,10 +2,12 @@ from PySide6.QtWidgets import QMainWindow, QWidget, QStackedWidget, QFrame, QVBo
 from PySide6.QtCore import Qt, QTimer
 from .pages.dashboard import DashboardPage
 from .pages.clientes.clientes_main import ClientesMain
+from .pages.proveedores.proveedores_main import ProveedoresMain
 from .pages.vehiculos.vehiculos_main import VehiculosMain
 from .pages.facturacion import FacturacionPage
 from .pages.reportes import ReportesPage
 from .pages.configuracion import ConfiguracionPage
+from src.ui.notify import NotifyPopup
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -27,9 +29,10 @@ class MainWindow(QMainWindow):
         self.btn_clientes = QPushButton("Clientes")
         self.btn_vehiculos = QPushButton("Vehículos")
         self.btn_facturacion = QPushButton("Facturación")
+        self.btn_proveedores = QPushButton("Proveedores")
         self.btn_reportes = QPushButton("Reportes")
         self.btn_config = QPushButton("Configuración")
-        for b in [self.btn_inicio, self.btn_clientes, self.btn_vehiculos, self.btn_facturacion, self.btn_reportes, self.btn_config]:
+        for b in [self.btn_inicio, self.btn_clientes, self.btn_vehiculos, self.btn_facturacion,self.btn_proveedores, self.btn_reportes, self.btn_config]:
             b.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             sbl.addWidget(b)
         sbl.addStretch(1)
@@ -43,9 +46,10 @@ class MainWindow(QMainWindow):
         self.page_clientes = ClientesMain(notify=self.notify, navigate=self.navigate_to, navigate_back=self.navigate_back)
         self.page_vehiculos = VehiculosMain(notify=self.notify, navigate=self.navigate_to, navigate_back=self.navigate_back)
         self.page_facturacion = FacturacionPage()
+        self.page_proveedores = ProveedoresMain(notify=self.notify, navigate=self.navigate_to, navigate_back=self.navigate_back)
         self.page_reportes = ReportesPage()
         self.page_config = ConfiguracionPage()
-        for p in [self.page_inicio, self.page_clientes, self.page_vehiculos, self.page_facturacion, self.page_reportes, self.page_config]:
+        for p in [self.page_inicio, self.page_clientes, self.page_vehiculos, self.page_facturacion,self.page_proveedores,  self.page_reportes, self.page_config]:
             self.stack.addWidget(p)
 
         root.addWidget(sidebar); root.addWidget(self.stack, 1)
@@ -55,6 +59,7 @@ class MainWindow(QMainWindow):
         self.btn_clientes.clicked.connect(lambda: self.show_fixed_page(self.page_clientes))
         self.btn_vehiculos.clicked.connect(lambda: self.show_fixed_page(self.page_vehiculos))
         self.btn_facturacion.clicked.connect(lambda: self.show_fixed_page(self.page_facturacion))
+        self.btn_proveedores.clicked.connect(lambda: self.show_fixed_page(self.page_proveedores))
         self.btn_reportes.clicked.connect(lambda: self.show_fixed_page(self.page_reportes))
         self.btn_config.clicked.connect(lambda: self.show_fixed_page(self.page_config))
 
@@ -99,6 +104,10 @@ class MainWindow(QMainWindow):
         x = (self.width() - w)//2; y = self.height() - h - 20
         self._toast.setGeometry(x, y, w, h)
 
-    def notify(self, message: str, timeout_ms: int = 2000):
-        self._toast.setText(message); self._toast.setVisible(True); self._toast.raise_()
-        self._toast_timer.start(timeout_ms)
+    
+
+    def notify(self, text, tipo="info"):
+        popup = NotifyPopup(text, tipo, parent=self)
+        popup.adjustSize()
+        popup.show_centered()
+

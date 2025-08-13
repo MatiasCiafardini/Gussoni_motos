@@ -1,100 +1,112 @@
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QLabel, QFormLayout, QLineEdit,
-    QPushButton, QHBoxLayout, QComboBox
+    QWidget, QVBoxLayout, QFormLayout, QLineEdit, QPushButton, QHBoxLayout
 )
 from src.data import util_excel as ux
+from src.ui.notify import NotifyPopup
+
 
 class VehiculoEditar(QWidget):
-    """
-    Página interna para crear/editar un vehículo.
-    - 'Estado' incluye: Disponible / Reservado / Vendido / No disponible
-    - Abajo centrado: Guardar (izquierda) y Volver (derecha)
-    """
-    def __init__(self, parent=None, vehiculo_id: int | None = None, notify=None, navigate=None, navigate_back=None, on_saved=None):
-        super().__init__(parent)
+    def __init__(self, vehiculo_id=None, notify=None, navigate=None, navigate_back=None, on_saved=None):
+        super().__init__()
         self._id = vehiculo_id
-        self._notify = notify or (lambda msg: None)
-        self._navigate = navigate or (lambda w: None)
-        self._navigate_back = navigate_back or (lambda: None)
-        self._on_saved = on_saved or (lambda vid: None)
+        # Si no se pasa notify, usar el popup centrado por defecto
+        self._notify = notify if callable(notify) else (lambda msg, tipo="info": self._show_notify(msg, tipo))
+        self._navigate = navigate
+        self._navigate_back = navigate_back
+        self._on_saved = on_saved
 
-        root = QVBoxLayout(self)
-
-        # Header
-        hdr = QHBoxLayout()
-        title = QLabel("Editar Vehículo" if vehiculo_id else "Nuevo Vehículo")
-        title.setStyleSheet("font-size:16px; font-weight:600;")
-        hdr.addWidget(title); hdr.addStretch(1)
-        root.addLayout(hdr)
+        layout = QVBoxLayout(self)
 
         # Formulario
         form = QFormLayout()
-        self.marca = QLineEdit()
-        self.modelo = QLineEdit()
-        self.anio = QLineEdit()
-        self.vin = QLineEdit()
-        self.precio = QLineEdit()
-        self.estado = QComboBox(); self.estado.addItems(["Disponible","Reservado","Vendido","No disponible"])
+        self.txt_marca = QLineEdit()
+        self.txt_modelo = QLineEdit()
+        self.txt_anio = QLineEdit()
+        self.txt_vin = QLineEdit()
+        self.txt_precio = QLineEdit()
+        self.txt_estado = QLineEdit()
 
-        form.addRow("Marca:", self.marca)
-        form.addRow("Modelo:", self.modelo)
-        form.addRow("Año:", self.anio)
-        form.addRow("VIN:", self.vin)
-        form.addRow("Precio:", self.precio)
-        form.addRow("Estado:", self.estado)
-        root.addLayout(form)
+        form.addRow("Marca:", self.txt_marca)
+        form.addRow("Modelo:", self.txt_modelo)
+        form.addRow("Año:", self.txt_anio)
+        form.addRow("VIN:", self.txt_vin)
+        form.addRow("Precio:", self.txt_precio)
+        form.addRow("Estado:", self.txt_estado)
 
-        # Abajo centrado: Guardar (izq) y Volver (der)
-        root.addStretch(1)
-        bottom = QHBoxLayout()
-        self.btn_guardar = QPushButton("Guardar"); self.btn_guardar.setObjectName("Primary")
-        self.btn_volver = QPushButton("Volver")
-        bottom.addStretch(1); bottom.addWidget(self.btn_guardar); bottom.addWidget(self.btn_volver); bottom.addStretch(1)
-        root.addLayout(bottom)
+        layout.addLayout(form)
 
-        # Eventos
-        self.btn_volver.clicked.connect(self._navigate_back)
-        self.btn_guardar.clicked.connect(self._on_guardar)
+        # Botones
+        btn_row = QHBoxLayout()
+        btn_guardar = QPushButton("Guardar")
+        btn_cancelar = QPushButton("Cancelar")
+        btn_guardar.clicked.connect(self._guardar)
+        btn_cancelar.clicked.connect(self._navigate_back)
+        btn_row.addWidget(btn_guardar)
+        btn_row.addWidget(btn_cancelar)
 
-        if vehiculo_id is not None:
-            self._load(vehiculo_id)
+        layout.addLayout(btn_row)
 
-    def _load(self, vid: int):
-        data = ux.get_vehiculo_by_id(vid)
-        if not data:
-            self._notify("Vehículo no encontrado."); self.btn_guardar.setEnabled(False); return
-        self._id = vid
-        self.marca.setText(str(data.get("marca","")))
-        self.modelo.setText(str(data.get("modelo","")))
-        self.anio.setText(str(data.get("anio","")))
-        self.vin.setText(str(data.get("vin","")))
-        self.precio.setText(str(data.get("precio","")))
-        self.estado.setCurrentText(str(data.get("estado","Disponible")))
+        if self._id is not None:
+            self._cargar_datos()
 
-    def _on_guardar(self):
-        # normalizar numéricos
-        anio_val = self.anio.text().strip()
-        precio_val = self.precio.text().strip()
+    def _show_notify(self, text, tipo="info"):
+        """Muestra un popup de notificación centrado sobre la ventana principal."""
+        popup = NotifyPopup(text, tipo, parent=self)
+        popup.show_centered()
+
+    def _cargar_datos(self):
+        """Carga datos del vehículo en el formulario."""
+        data = ux.get_vehiculo_by_id(self._id)
+        if data:
+            self.txt_marca.setText(str(data.get("marca", "")))
+            self.txt_modelo.setText(str(data.get("modelo", "")))
+            self.txt_anio.setText(str(data.get("anio", "")))
+            self.txt_vin.setText(str(data.get("vin", "")))
+            self.txt_precio.setText(str(data.get("precio", "")))
+            self.txt_estado.setText(str(data.get("estado", "")))
+
+    def _validar(self):
+        """Valida los campos antes de guardar."""
+
+
+        if not self.txt_marca.text().strip():
+            self._notify("La marca es obligatoria", "error")
+            return False
+        if not self.txt_modelo.text().strip():
+            self._notify("El modelo es obligatorio", "error")
+            return False
+        if not self.txt_anio.text().isdigit() or len(self.txt_anio.text()) != 4:
+            
+            print("VALIDANDO vehiculo...")
+            self._show_notify("El año debe tener 4 dígitos numéricos", "error")
+            return False
         try:
-            anio_val = int(anio_val) if anio_val else None
-        except Exception:
-            anio_val = None
-        try:
-            precio_val = float(precio_val) if precio_val else None
-        except Exception:
-            precio_val = None
+            precio = float(self.txt_precio.text().replace(",", "."))
+            if precio < 0:
+                raise ValueError
+        except ValueError:
+            self._notify("El precio debe ser un número válido y positivo", "error")
+            return False
+        return True
+
+    def _guardar(self):
+        """Guarda o actualiza el vehículo."""
+        if not self._validar():
+            return
 
         payload = {
             "id": self._id,
-            "marca": self.marca.text().strip(),
-            "modelo": self.modelo.text().strip(),
-            "anio": anio_val,
-            "vin": self.vin.text().strip(),
-            "precio": precio_val,
-            "estado": self.estado.currentText(),
+            "marca": self.txt_marca.text().strip(),
+            "modelo": self.txt_modelo.text().strip(),
+            "anio": self.txt_anio.text().strip(),
+            "vin": self.txt_vin.text().strip(),
+            "precio": float(self.txt_precio.text().replace(",", ".")),
+            "estado": self.txt_estado.text().strip(),
         }
-        vid = ux.save_vehiculo(payload)
-        self._id = vid
-        self._notify("Guardado correctamente.")
-        self._on_saved(vid)
+
+        vid = ux.upsert_vehiculo(payload)
+
+        self._notify("Vehículo guardado correctamente", "success")
+        if self._on_saved:
+            self._on_saved(vid)
         self._navigate_back()

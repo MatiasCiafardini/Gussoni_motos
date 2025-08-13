@@ -6,3 +6,4 @@ DATA_DIR = ROOT / "data"
 
 CLIENTES_XLSX = DATA_DIR / "clientes.xlsx"
 VEHICULOS_XLSX = DATA_DIR / "vehiculos.xlsx"
+PROVEEDORES_XLSX = DATA_DIR / "proveedores.xlsx"
