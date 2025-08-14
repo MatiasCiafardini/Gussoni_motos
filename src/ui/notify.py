@@ -31,15 +31,16 @@ class NotifyPopup(QDialog):
         QTimer.singleShot(duration, self.close)
 
     def _get_style(self, tipo):
+        
         base = """
-            QLabel {
+            QLabel {{
                 padding: 20px 30px;
                 border-radius: 12px;
                 color: white;
                 font-size: 18px;
                 font-weight: bold;
-                background-color: #45180D;
-            }
+                {color}
+            }}
         """
         colores = {
             "info": "background-color: #3498db;",
@@ -47,7 +48,8 @@ class NotifyPopup(QDialog):
             "warning": "background-color: #f39c12;",
             "error": "background-color: #45180D;",
         }
-        return base + colores.get(tipo, colores["info"])
+        
+        return base.format(color=colores.get(tipo, colores[tipo]))
 
     def show_centered(self):
         """Muestra el popup centrado en la ventana padre."""

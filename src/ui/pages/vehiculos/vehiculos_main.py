@@ -7,7 +7,9 @@ from src.data import util_excel as ux
 from .vehiculos_tabla import VehiculosTabla
 from .vehiculos_detalle import VehiculoDetalle
 from .vehiculos_editar import VehiculoEditar
+from src.ui.widgets.paginator import TablePaginator  # ← Importamos el paginador
 import pandas as pd
+
 LABEL_STRETCH = 1
 FIELD_STRETCH = 3
 
@@ -18,10 +20,10 @@ class VehiculosMain(QWidget):
         self._navigate = navigate or (lambda w: None)
         self._navigate_back = navigate_back or (lambda: None)
         self._filter_cols = None
-        self._first_show = True  # bandera para saber si es la primera vez
+        self._first_show = True
         lay = QVBoxLayout(self)
 
-        # --- Filtros (SIN título) ---
+        # --- Filtros ---
         self.gb_filtros = QGroupBox("")
         self.gb_filtros.setStyleSheet("""
             QGroupBox { margin-top: 0px; }
@@ -29,7 +31,6 @@ class VehiculosMain(QWidget):
             QWidget#btnContainer { background: transparent; }
         """)
 
-        # Campos de filtro
         self.f_marca   = QLineEdit(); self.f_marca.setPlaceholderText("Ej: Yamaha")
         self.f_modelo  = QLineEdit(); self.f_modelo.setPlaceholderText("Ej: MT-07")
         self.f_anio    = QLineEdit(); self.f_anio.setPlaceholderText("Ej: 2024")
@@ -44,7 +45,6 @@ class VehiculosMain(QWidget):
         self.grid_filtros.setVerticalSpacing(10)
         self.gb_filtros.setLayout(self.grid_filtros)
 
-        # Botones dentro del groupbox
         self._buttons_bar = QHBoxLayout()
         self.btn_buscar  = QPushButton("Buscar");  self.btn_buscar.setObjectName("Primary")
         self.btn_limpiar = QPushButton("Limpiar")
@@ -64,34 +64,31 @@ class VehiculosMain(QWidget):
         self.tabla = VehiculosTabla(self)
         lay.addWidget(self.tabla)
 
+        # --- Paginador ---
+        self.paginator = TablePaginator(self.tabla)
+        lay.addWidget(self.paginator)
+
         # Conexiones
         self.btn_buscar.clicked.connect(self.load_data)
         self.btn_limpiar.clicked.connect(self.clear_filters)
         self.btn_agregar.clicked.connect(self.open_new)
-        self.tabla.perfil_clicked.connect(self.on_click_perfil)  # emite fila
-
-        # (Sin búsqueda automática al iniciar)
-
+        self.tabla.perfil_clicked.connect(self.on_click_perfil)
 
     def showEvent(self, event):
-        """Se ejecuta cada vez que la pantalla es visible."""
         super().showEvent(event)
-        # Limpiar tabla al entrar
         empty_df = pd.DataFrame(columns=[
             "id", "marca", "modelo", "anio", "cuadro", "motor", "estado"
         ])
         self.tabla.set_dataframe(empty_df)
         if self._first_show:
-            self._first_show = False
-            return  # primera vez: no recargamos nada
+            return
         self.load_data()
-    # ----- Disposición responsive con proporciones fijas -----
+
     def _arrange_filters(self, cols: int):
         if self._filter_cols == cols:
             return
         self._filter_cols = cols
 
-        # Limpiar grid
         while self.grid_filtros.count():
             item = self.grid_filtros.takeAt(0)
             w = item.widget()
@@ -126,7 +123,6 @@ class VehiculosMain(QWidget):
         cols = 3 if w >= 1000 else 2 if w >= 700 else 1
         self._arrange_filters(cols)
 
-    # ----- Acciones -----
     def clear_filters(self):
         self.f_marca.clear()
         self.f_modelo.clear()
@@ -137,7 +133,8 @@ class VehiculosMain(QWidget):
         self._notify("Filtros limpiados.")
 
     def load_data(self):
-        # Armado de filtros (ignora vacíos)
+        if self._first_show:
+            self._first_show = False
         filters = {
             "marca":       self.f_marca.text().strip(),
             "modelo":      self.f_modelo.text().strip(),
@@ -151,7 +148,7 @@ class VehiculosMain(QWidget):
 
         filters = {k: v for k, v in filters.items() if v}
         df = ux.load_vehiculos(filters)
-        self.tabla.set_dataframe(df)
+        self.paginator.set_dataframe(df)  # ← ahora usamos el paginador
 
     def on_click_perfil(self, row: int):
         vid = self.tabla.model.get_row_id(row)
@@ -161,8 +158,13 @@ class VehiculosMain(QWidget):
         self._navigate(detalle)
 
     def open_new(self):
-        editor = VehiculoEditar(vehiculo_id=None, notify=self._notify, navigate=self._navigate,
-                                navigate_back=self._navigate_back, on_saved=self._after_new_saved)
+        editor = VehiculoEditar(
+            vehiculo_id=None,
+            notify=self._notify,
+            navigate=self._navigate,
+            navigate_back=self._navigate_back,
+            on_saved=self._after_new_saved
+        )
         self._navigate(editor)
 
     def _after_new_saved(self, vid: int):
