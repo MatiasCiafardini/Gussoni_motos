@@ -4,7 +4,7 @@ from .pages.dashboard import DashboardPage
 from .pages.clientes.clientes_main import ClientesMain
 from .pages.proveedores.proveedores_main import ProveedoresMain
 from .pages.vehiculos.vehiculos_main import VehiculosMain
-from .pages.facturacion import FacturacionPage
+from .pages.facturacion import FacturacionMain
 from .pages.reportes import ReportesPage
 from .pages.configuracion import ConfiguracionPage
 from src.ui.notify import NotifyPopup
@@ -45,7 +45,7 @@ class MainWindow(QMainWindow):
         self.page_inicio = DashboardPage()
         self.page_clientes = ClientesMain(notify=self.notify, navigate=self.navigate_to, navigate_back=self.navigate_back)
         self.page_vehiculos = VehiculosMain(notify=self.notify, navigate=self.navigate_to, navigate_back=self.navigate_back)
-        self.page_facturacion = FacturacionPage()
+        self.page_facturacion = FacturacionMain()
         self.page_proveedores = ProveedoresMain(notify=self.notify, navigate=self.navigate_to, navigate_back=self.navigate_back)
         self.page_reportes = ReportesPage()
         self.page_config = ConfiguracionPage()
